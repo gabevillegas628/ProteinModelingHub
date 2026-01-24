@@ -179,13 +179,24 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
                 set platformSpeed 3;
               `
 
-              if (extractedData) {
-                if (extractedData.type === 'state') {
-                  // State script contains EVERYTHING - load command + all visual modifications
-                  // Execute it directly without applying any additional styling
-                  console.log('Executing full state script to restore student modifications')
-                  window.Jmol.script(appletRef.current!, baseSettings + extractedData.data)
-                } else if (extractedData.type === 'pdb') {
+              // First, try to load the file directly using JSmol's native PNGJ support
+              // JSmol can handle PNGJ files and restore the full state including all modifications
+              const isPngj = fileUrl.toLowerCase().endsWith('.png') ||
+                             fileUrl.toLowerCase().endsWith('.pngj') ||
+                             fileUrl.toLowerCase().endsWith('.jpg') ||
+                             fileUrl.toLowerCase().endsWith('.jpeg')
+
+              if (isPngj) {
+                // Use JSmol's native PNGJ loading - this handles the embedded ZIP automatically
+                // The PNGJ format stores everything including molecular data and visual state
+                console.log('Loading PNGJ file natively:', fileUrl)
+                // Use load with PNGJ filter - JSmol will extract and execute the embedded state
+                window.Jmol.script(appletRef.current!, `
+                  ${baseSettings}
+                  load "${fileUrl}" PNGJ;
+                `)
+              } else if (extractedData) {
+                if (extractedData.type === 'pdb') {
                   // Raw PDB data - load it and apply default styling
                   const escapedData = extractedData.data.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
                   console.log('Loading inline PDB data with default styling')
@@ -210,7 +221,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
               } else {
                 // Fallback: try loading from PDB if we have a proteinPdbId
                 if (proteinPdbId) {
-                  console.log('PNGJ extraction failed, loading from PDB:', proteinPdbId)
+                  console.log('No extractable data, loading from PDB:', proteinPdbId)
                   window.Jmol.script(appletRef.current!, `
                     ${baseSettings}
                     load =${proteinPdbId};
