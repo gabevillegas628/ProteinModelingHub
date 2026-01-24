@@ -1,6 +1,9 @@
 import { useState, useEffect, useRef } from 'react'
 import * as studentApi from '../../services/studentApi'
+import * as messageApi from '../../services/messageApi'
 import JSmolViewer from '../shared/JSmolViewer'
+import CommentThread from '../shared/CommentThread'
+import { useAuth } from '../../context/AuthContext'
 
 interface ViewerState {
   isOpen: boolean
@@ -9,12 +12,23 @@ interface ViewerState {
   proteinPdbId?: string
 }
 
+interface CommentsState {
+  [submissionId: string]: {
+    messages: messageApi.Message[]
+    loading: boolean
+    error: string
+    expanded: boolean
+  }
+}
+
 export default function ModelsTab() {
+  const { user } = useAuth()
   const [data, setData] = useState<studentApi.ModelsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState<string | null>(null)
   const [viewer, setViewer] = useState<ViewerState>({ isOpen: false, fileUrl: '', modelName: '' })
+  const [comments, setComments] = useState<CommentsState>({})
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
 
   useEffect(() => {
@@ -61,6 +75,60 @@ export default function ModelsTab() {
 
   const closeViewer = () => {
     setViewer({ isOpen: false, fileUrl: '', modelName: '' })
+  }
+
+  const toggleComments = async (submissionId: string) => {
+    const current = comments[submissionId]
+
+    if (current?.expanded) {
+      // Collapse
+      setComments(prev => ({
+        ...prev,
+        [submissionId]: { ...prev[submissionId], expanded: false }
+      }))
+    } else {
+      // Expand and load comments
+      setComments(prev => ({
+        ...prev,
+        [submissionId]: {
+          messages: prev[submissionId]?.messages || [],
+          loading: true,
+          error: '',
+          expanded: true
+        }
+      }))
+      await loadComments(submissionId)
+    }
+  }
+
+  const loadComments = async (submissionId: string) => {
+    try {
+      const messages = await messageApi.getSubmissionComments(submissionId)
+      setComments(prev => ({
+        ...prev,
+        [submissionId]: {
+          messages,
+          loading: false,
+          error: '',
+          expanded: true
+        }
+      }))
+    } catch (err) {
+      setComments(prev => ({
+        ...prev,
+        [submissionId]: {
+          messages: [],
+          loading: false,
+          error: err instanceof Error ? err.message : 'Failed to load comments',
+          expanded: true
+        }
+      }))
+    }
+  }
+
+  const postComment = async (submissionId: string, content: string) => {
+    await messageApi.postSubmissionComment(submissionId, content)
+    await loadComments(submissionId)
   }
 
   const formatFileSize = (bytes: number | null) => {
@@ -153,13 +221,6 @@ export default function ModelsTab() {
                         <span>{formatFileSize(model.submission.fileSize)}</span>
                         <span>Uploaded {formatDate(model.submission.createdAt)}</span>
                       </div>
-                      {model.submission.feedback && (
-                        <div className="mt-2 pt-2 border-t border-gray-200">
-                          <p className="text-gray-700">
-                            <span className="font-medium">Feedback:</span> {model.submission.feedback}
-                          </p>
-                        </div>
-                      )}
                     </div>
                   ) : (
                     <p className="text-sm text-gray-400 italic">No submission yet</p>
@@ -195,31 +256,74 @@ export default function ModelsTab() {
               </div>
 
               {model.submission && (
-                <div className="mt-4 pt-4 border-t border-gray-100">
-                  <div className="flex gap-4 items-start">
-                    <img
-                      src={studentApi.getModelFileUrl(model.submission.id)}
-                      alt={model.name}
-                      className="max-w-sm h-auto rounded-md border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity"
-                      style={{ maxHeight: '250px' }}
-                      onClick={() => openViewer(model.submission!.id, model.name)}
-                    />
-                    <div className="flex flex-col gap-2">
-                      <button
+                <>
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <div className="flex gap-4 items-start">
+                      <img
+                        src={studentApi.getModelFileUrl(model.submission.id)}
+                        alt={model.name}
+                        className="max-w-sm h-auto rounded-md border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity"
+                        style={{ maxHeight: '250px' }}
                         onClick={() => openViewer(model.submission!.id, model.name)}
-                        className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 transition-colors text-sm"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" />
-                        </svg>
-                        View in 3D
-                      </button>
-                      <p className="text-xs text-gray-500">
-                        Click image or button to open interactive 3D viewer
-                      </p>
+                      />
+                      <div className="flex flex-col gap-2">
+                        <button
+                          onClick={() => openViewer(model.submission!.id, model.name)}
+                          className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 transition-colors text-sm"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" />
+                          </svg>
+                          View in 3D
+                        </button>
+                        <p className="text-xs text-gray-500">
+                          Click image or button to open interactive 3D viewer
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
+
+                  {/* Comments Section */}
+                  <div className="mt-4 pt-4 border-t border-gray-100">
+                    <button
+                      onClick={() => toggleComments(model.submission!.id)}
+                      className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-blue-600"
+                    >
+                      <svg
+                        className={`w-4 h-4 transition-transform ${comments[model.submission.id]?.expanded ? 'rotate-90' : ''}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                      </svg>
+                      Comments
+                      {comments[model.submission.id]?.messages?.length > 0 && (
+                        <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">
+                          {comments[model.submission.id].messages.length}
+                        </span>
+                      )}
+                    </button>
+
+                    {comments[model.submission.id]?.expanded && (
+                      <div className="mt-3 bg-gray-50 rounded-lg p-4" style={{ maxHeight: '400px' }}>
+                        <CommentThread
+                          messages={comments[model.submission.id]?.messages || []}
+                          loading={comments[model.submission.id]?.loading || false}
+                          error={comments[model.submission.id]?.error || ''}
+                          onPost={(content) => postComment(model.submission!.id, content)}
+                          onRefresh={() => loadComments(model.submission!.id)}
+                          placeholder="Write a comment..."
+                          emptyMessage="No comments yet. Start the conversation!"
+                          currentUserId={user?.id}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </>
               )}
             </div>
           ))}

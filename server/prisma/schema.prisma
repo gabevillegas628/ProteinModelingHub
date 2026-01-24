@@ -118,7 +118,7 @@ model Submission {
   filePath        String           // Storage path
   fileSize        Int?             // Size in bytes
   status          SubmissionStatus @default(DRAFT)
-  feedback        String?          // Instructor feedback
+  feedback        String?          // Deprecated: use comments instead
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 
@@ -126,6 +126,7 @@ model Submission {
   group         Group         @relation(fields: [groupId], references: [id], onDelete: Cascade)
   modelTemplate ModelTemplate @relation(fields: [modelTemplateId], references: [id], onDelete: Cascade)
   submittedBy   User          @relation(fields: [submittedById], references: [id])
+  comments      Message[]     // Threaded comments on this submission
 
   // Track submission history - allow multiple submissions per group/template
   // Latest one is the "current" submission (query by createdAt DESC)
@@ -136,19 +137,23 @@ model Submission {
 // ============================================
 // MESSAGE
 // Chat messages for a group (students + all instructors)
+// submissionId = NULL means group chat, SET means submission comment
 // ============================================
 model Message {
-  id        String   @id @default(cuid())
-  groupId   String
-  userId    String
-  content   String
-  createdAt DateTime @default(now())
+  id           String   @id @default(cuid())
+  groupId      String
+  userId       String
+  submissionId String?  // NULL = group chat, SET = submission comment
+  content      String
+  createdAt    DateTime @default(now())
 
   // Relations
-  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  user  User  @relation(fields: [userId], references: [id])
+  group      Group       @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [userId], references: [id])
+  submission Submission? @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
   @@index([groupId, createdAt])
+  @@index([submissionId, createdAt])
   @@map("messages")
 }
 

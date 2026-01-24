@@ -1,30 +1,65 @@
+import { useState, useEffect, useCallback } from 'react'
+import * as messageApi from '../../services/messageApi'
+import CommentThread from '../shared/CommentThread'
+import { useAuth } from '../../context/AuthContext'
+
 interface Props {
   groupId: string
 }
 
-export default function DiscussionTab({ groupId: _groupId }: Props) {
+export default function DiscussionTab({ groupId }: Props) {
+  const { user } = useAuth()
+  const [messages, setMessages] = useState<messageApi.Message[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    loadMessages()
+    // Poll for new messages every 10 seconds
+    const interval = setInterval(loadMessages, 10000)
+    return () => clearInterval(interval)
+  }, [groupId])
+
+  const loadMessages = useCallback(async () => {
+    try {
+      setLoading(messages.length === 0)
+      const data = await messageApi.getGroupMessages(groupId)
+      setMessages(data)
+      setError('')
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load messages')
+    } finally {
+      setLoading(false)
+    }
+  }, [groupId, messages.length])
+
+  const handlePost = async (content: string) => {
+    await messageApi.postGroupMessage(groupId, content)
+    await loadMessages()
+  }
+
   return (
-    <div className="bg-white rounded-lg shadow p-8 text-center">
-      <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-      </svg>
-      <h3 className="text-lg font-medium text-gray-800 mb-2">Discussion Coming Soon</h3>
-      <p className="text-gray-500 max-w-md mx-auto">
-        This feature will allow instructors and students to have threaded discussions
-        about the protein models, share insights, and collaborate on their research.
-      </p>
-      <div className="mt-6 p-4 bg-blue-50 rounded-lg max-w-md mx-auto">
-        <p className="text-sm text-blue-700">
-          <span className="font-medium">Planned features:</span>
-          <br />
-          • Threaded message discussions
-          <br />
-          • Reference specific submissions
-          <br />
-          • Mention other group members
-          <br />
-          • File attachments
+    <div className="bg-white rounded-lg shadow flex flex-col" style={{ height: 'calc(100vh - 320px)', minHeight: '400px' }}>
+      {/* Header */}
+      <div className="px-6 py-4 border-b border-gray-200 shrink-0">
+        <h2 className="text-lg font-semibold text-gray-800">Group Discussion</h2>
+        <p className="text-sm text-gray-500">
+          Chat with group members about their protein model
         </p>
+      </div>
+
+      {/* Chat Area */}
+      <div className="flex-1 p-6 overflow-hidden">
+        <CommentThread
+          messages={messages}
+          loading={loading}
+          error={error}
+          onPost={handlePost}
+          onRefresh={loadMessages}
+          placeholder="Type a message..."
+          emptyMessage="No messages yet. Start the conversation!"
+          currentUserId={user?.id}
+        />
       </div>
     </div>
   )
