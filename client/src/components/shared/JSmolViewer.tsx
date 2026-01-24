@@ -96,30 +96,63 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
       let pdbData: string | null = null
       let stateScript: string | null = null
       let pdbId: string | null = null
+      const zipFileContents: Map<string, string> = new Map()
 
-      // Extract all relevant data from the ZIP
+      // First pass: read all files
       for (const [filename, file] of Object.entries(zip.files)) {
         if (file.dir) continue
-
-        // Look for molecular structure files (PDB or CIF format)
-        const lowerName = filename.toLowerCase()
-        if (lowerName.endsWith('.pdb') || lowerName.endsWith('.cif') || lowerName.endsWith('.mmcif')) {
-          pdbData = await (file as JSZip.JSZipObject).async('string')
-          console.log('Found molecular data in:', filename)
-        }
+        const content = await (file as JSZip.JSZipObject).async('string')
+        zipFileContents.set(filename, content)
 
         // Look for state script
         if (filename.includes('state.spt') || filename.endsWith('.spt')) {
-          stateScript = await (file as JSZip.JSZipObject).async('string')
-          console.log('Found state script:', filename, 'length:', stateScript.length)
+          stateScript = content
+          console.log('Found state script:', filename, 'length:', content.length)
+        }
+      }
+
+      // Second pass: find molecular data
+      for (const [filename, content] of zipFileContents) {
+        // Skip state scripts and manifest files
+        if (filename.endsWith('.spt') || filename.includes('Manifest') || filename.includes('version')) {
+          continue
+        }
+
+        // Check for molecular structure files by extension
+        const lowerName = filename.toLowerCase()
+        if (lowerName.endsWith('.pdb') || lowerName.endsWith('.cif') || lowerName.endsWith('.mmcif')) {
+          pdbData = content
+          console.log('Found molecular data in:', filename)
+
+          // Try to extract PDB ID from filename (e.g., "4X57.pdb" -> "4X57")
+          const pdbIdFromFile = filename.match(/([A-Za-z0-9]{4})\.(?:pdb|cif|mmcif)$/i)
+          if (pdbIdFromFile) {
+            pdbId = pdbIdFromFile[1].toUpperCase()
+            console.log('Extracted PDB ID from filename:', pdbId)
+          }
+          break
+        }
+
+        // Check any file for ATOM/HETATM content (handles .txt and other extensions)
+        if (!pdbData && (content.includes('ATOM  ') || content.includes('HETATM'))) {
+          pdbData = content
+          console.log('Found PDB data (by content) in:', filename)
+
+          // Try to extract PDB ID from filename (e.g., "4X57 edit.txt" -> "4X57")
+          const pdbIdFromFile = filename.match(/([A-Za-z0-9]{4})[\s._-]/i)
+          if (pdbIdFromFile) {
+            pdbId = pdbIdFromFile[1].toUpperCase()
+            console.log('Extracted PDB ID from filename:', pdbId)
+          }
+          break
         }
 
         // Some PNGJ files store model data in numbered files like "0.symmetry" or just "1"
         if (!pdbData && /^\d+$/.test(filename.split('/').pop() || '')) {
-          const content = await (file as JSZip.JSZipObject).async('string')
           if (content.includes('ATOM') || content.includes('HETATM')) {
             pdbData = content
             console.log('Found PDB data in numbered file:', filename)
+            break
           }
         }
       }
@@ -129,11 +162,45 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
       if (stateScript) {
         console.log('State script preview (first 500 chars):', stateScript.substring(0, 500))
 
-        // Look for PDB ID in load command (e.g., "load =1ABC" or "load :1ABC")
-        const pdbIdMatch = stateScript.match(/load\s+[=:]([A-Za-z0-9]{4})/i)
-        if (pdbIdMatch) {
-          pdbId = pdbIdMatch[1].toUpperCase()
-          console.log('Found PDB ID in state script:', pdbId)
+        // Look for PDB ID in load command - multiple formats:
+        // 1. load =1ABC or load :1ABC (direct PDB fetch)
+        // 2. load /*file*/"Pdb::$SCRIPT_PATH$4X57 edit.txt" (PNGJ internal reference)
+        // 3. load "4X57.pdb" (file reference)
+        if (!pdbId) {
+          const pdbIdMatch = stateScript.match(/load\s+[=:]([A-Za-z0-9]{4})/i)
+          if (pdbIdMatch) {
+            pdbId = pdbIdMatch[1].toUpperCase()
+            console.log('Found PDB ID in state script (=/:):', pdbId)
+          }
+        }
+
+        // Look for $SCRIPT_PATH$ references which contain the filename
+        if (!pdbId) {
+          const scriptPathMatch = stateScript.match(/\$SCRIPT_PATH\$([^"]+)/i)
+          if (scriptPathMatch) {
+            const refFilename = scriptPathMatch[1]
+            console.log('Found $SCRIPT_PATH$ reference:', refFilename)
+            // Extract PDB ID from the filename (e.g., "4X57 edit.txt" -> "4X57")
+            const pdbIdFromRef = refFilename.match(/([A-Za-z0-9]{4})[\s._-]/i)
+            if (pdbIdFromRef) {
+              pdbId = pdbIdFromRef[1].toUpperCase()
+              console.log('Extracted PDB ID from $SCRIPT_PATH$ ref:', pdbId)
+            }
+          }
+        }
+
+        // Look for file load references like load "filename.pdb"
+        if (!pdbId) {
+          const fileLoadMatch = stateScript.match(/load\s+(?:\/\*file\*\/\s*)?["']?(?:Pdb::)?([^"'\s;]+\.(?:pdb|cif|txt))/i)
+          if (fileLoadMatch) {
+            const refFilename = fileLoadMatch[1]
+            console.log('Found file load reference:', refFilename)
+            const pdbIdFromRef = refFilename.match(/([A-Za-z0-9]{4})[\s._-]/i)
+            if (pdbIdFromRef) {
+              pdbId = pdbIdFromRef[1].toUpperCase()
+              console.log('Extracted PDB ID from file load ref:', pdbId)
+            }
+          }
         }
 
         // Look for inline DATA blocks - this is how PNGJ often stores molecular data

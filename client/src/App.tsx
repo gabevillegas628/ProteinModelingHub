@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './context/AuthContext'
 import Login from './pages/Login'
 import Register from './pages/Register'
+import ResetPassword from './pages/ResetPassword'
 import Dashboard from './pages/Dashboard'
 import StudentDashboard from './pages/StudentDashboard'
 import Admin from './pages/Admin'
@@ -72,6 +73,10 @@ function App() {
       <Route
         path="/register"
         element={user ? <Navigate to={getDefaultRoute()} replace /> : <Register />}
+      />
+      <Route
+        path="/reset-password"
+        element={user ? <Navigate to={getDefaultRoute()} replace /> : <ResetPassword />}
       />
       <Route
         path="/dashboard"

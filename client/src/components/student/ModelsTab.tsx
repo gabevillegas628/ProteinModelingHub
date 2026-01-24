@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import * as studentApi from '../../services/studentApi'
-import JSmolViewer from './JSmolViewer'
+import JSmolViewer from '../shared/JSmolViewer'
 
 interface ViewerState {
   isOpen: boolean
