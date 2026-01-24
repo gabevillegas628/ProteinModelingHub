@@ -1,0 +1,173 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  INSTRUCTOR
+  STUDENT
+}
+
+enum SubmissionStatus {
+  DRAFT
+  SUBMITTED
+  NEEDS_REVISION
+  APPROVED
+}
+
+// ============================================
+// USER
+// ============================================
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  firstName String
+  lastName  String
+  role      Role     @default(STUDENT)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  groupMemberships GroupMember[]
+  submissions      Submission[]
+  messages         Message[]
+  literature       Literature[]
+
+  @@map("users")
+}
+
+// ============================================
+// MODEL TEMPLATE
+// Admin-defined assignments that all groups must complete
+// e.g., "Model 1: Active Site View", "Model 2: Secondary Structure"
+// ============================================
+model ModelTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  orderIndex  Int      @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  submissions Submission[]
+
+  @@map("model_templates")
+}
+
+// ============================================
+// GROUP
+// A pair of students working on one protein
+// ============================================
+model Group {
+  id           String   @id @default(cuid())
+  name         String   // e.g., "Team Alpha" or auto-generated
+  proteinPdbId String   // PDB identifier, e.g., "1ABC"
+  proteinName  String   // Display name, e.g., "Hemoglobin"
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // Relations
+  members    GroupMember[]
+  submissions Submission[]
+  messages   Message[]
+  literature Literature[]
+
+  @@map("groups")
+}
+
+// ============================================
+// GROUP MEMBER
+// Links students to their group (typically 2 per group)
+// ============================================
+model GroupMember {
+  id       String   @id @default(cuid())
+  groupId  String
+  userId   String
+  joinedAt DateTime @default(now())
+
+  // Relations
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // A student can only be in one group, and only once per group
+  @@unique([groupId, userId])
+  @@map("group_members")
+}
+
+// ============================================
+// SUBMISSION
+// A model file submitted by a group for a specific template
+// ============================================
+model Submission {
+  id              String           @id @default(cuid())
+  groupId         String
+  modelTemplateId String
+  submittedById   String
+  fileName        String           // Original filename
+  filePath        String           // Storage path
+  fileSize        Int?             // Size in bytes
+  status          SubmissionStatus @default(DRAFT)
+  feedback        String?          // Instructor feedback
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  // Relations
+  group         Group         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  modelTemplate ModelTemplate @relation(fields: [modelTemplateId], references: [id], onDelete: Cascade)
+  submittedBy   User          @relation(fields: [submittedById], references: [id])
+
+  // Track submission history - allow multiple submissions per group/template
+  // Latest one is the "current" submission (query by createdAt DESC)
+  @@index([groupId, modelTemplateId])
+  @@map("submissions")
+}
+
+// ============================================
+// MESSAGE
+// Chat messages for a group (students + all instructors)
+// ============================================
+model Message {
+  id        String   @id @default(cuid())
+  groupId   String
+  userId    String
+  content   String
+  createdAt DateTime @default(now())
+
+  // Relations
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@index([groupId, createdAt])
+  @@map("messages")
+}
+
+// ============================================
+// LITERATURE
+// Papers/PDFs uploaded by a group for reference
+// ============================================
+model Literature {
+  id           String   @id @default(cuid())
+  groupId      String
+  uploadedById String
+  title        String
+  fileName     String   // Original filename
+  filePath     String   // Storage path
+  fileSize     Int?     // Size in bytes
+  description  String?
+  createdAt    DateTime @default(now())
+
+  // Relations
+  group      Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  uploadedBy User  @relation(fields: [uploadedById], references: [id])
+
+  @@index([groupId])
+  @@map("literature")
+}
