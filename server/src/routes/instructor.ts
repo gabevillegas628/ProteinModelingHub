@@ -1,6 +1,7 @@
-import { Router, Request, Response } from 'express';
+import { Router, Response } from 'express';
 import path from 'path';
 import fs from 'fs';
+import { SubmissionStatus } from '@prisma/client';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 
@@ -75,7 +76,7 @@ router.get('/groups', async (req: AuthRequest, res: Response) => {
 // Get single group details
 router.get('/groups/:groupId', async (req: AuthRequest, res: Response) => {
   try {
-    const { groupId } = req.params;
+    const groupId = req.params.groupId as string;
 
     if (!await hasGroupAccess(req.user!.userId, groupId)) {
       res.status(403).json({ error: 'You do not have access to this group' });
@@ -114,7 +115,7 @@ router.get('/groups/:groupId', async (req: AuthRequest, res: Response) => {
 // Get all submissions for a group
 router.get('/groups/:groupId/submissions', async (req: AuthRequest, res: Response) => {
   try {
-    const { groupId } = req.params;
+    const groupId = req.params.groupId as string;
 
     if (!await hasGroupAccess(req.user!.userId, groupId)) {
       res.status(403).json({ error: 'You do not have access to this group' });
@@ -157,7 +158,7 @@ router.get('/groups/:groupId/submissions', async (req: AuthRequest, res: Respons
 // Get submission file
 router.get('/submissions/file/:submissionId', async (req: AuthRequest, res: Response) => {
   try {
-    const { submissionId } = req.params;
+    const submissionId = req.params.submissionId as string;
 
     const submission = await prisma.submission.findUnique({
       where: { id: submissionId }
@@ -190,7 +191,7 @@ router.get('/submissions/file/:submissionId', async (req: AuthRequest, res: Resp
 // Update submission status/feedback
 router.patch('/submissions/:submissionId', async (req: AuthRequest, res: Response) => {
   try {
-    const { submissionId } = req.params;
+    const submissionId = req.params.submissionId as string;
     const { status, feedback } = req.body;
 
     const submission = await prisma.submission.findUnique({
@@ -208,8 +209,10 @@ router.patch('/submissions/:submissionId', async (req: AuthRequest, res: Respons
       return;
     }
 
-    const updateData: { status?: string; feedback?: string } = {};
-    if (status) updateData.status = status;
+    const updateData: { status?: SubmissionStatus; feedback?: string } = {};
+    if (status && Object.values(SubmissionStatus).includes(status)) {
+      updateData.status = status as SubmissionStatus;
+    }
     if (feedback !== undefined) updateData.feedback = feedback;
 
     const updated = await prisma.submission.update({
@@ -236,7 +239,7 @@ router.patch('/submissions/:submissionId', async (req: AuthRequest, res: Respons
 // Get all literature for a group
 router.get('/groups/:groupId/literature', async (req: AuthRequest, res: Response) => {
   try {
-    const { groupId } = req.params;
+    const groupId = req.params.groupId as string;
 
     if (!await hasGroupAccess(req.user!.userId, groupId)) {
       res.status(403).json({ error: 'You do not have access to this group' });
@@ -263,7 +266,7 @@ router.get('/groups/:groupId/literature', async (req: AuthRequest, res: Response
 // Get literature file
 router.get('/literature/file/:id', async (req: AuthRequest, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.params.id as string;
 
     const literature = await prisma.literature.findUnique({
       where: { id }
