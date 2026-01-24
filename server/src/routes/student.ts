@@ -243,6 +243,59 @@ router.get('/models/file/:submissionId', async (req: AuthRequest, res: Response)
   }
 });
 
+// Replace submission file with new PNGJ
+router.put('/models/:submissionId/replace', modelUpload.single('file'), async (req: AuthRequest, res: Response) => {
+  try {
+    const submissionId = req.params.submissionId as string;
+    const file = req.file;
+
+    if (!file) {
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+
+    const group = await getStudentGroup(req.user!.userId);
+    if (!group) {
+      fs.unlinkSync(file.path);
+      res.status(404).json({ error: 'You are not assigned to a group' });
+      return;
+    }
+
+    // Find existing submission
+    const submission = await prisma.submission.findUnique({
+      where: { id: submissionId }
+    });
+
+    if (!submission || submission.groupId !== group.id) {
+      fs.unlinkSync(file.path);
+      res.status(404).json({ error: 'Submission not found' });
+      return;
+    }
+
+    // Delete old file
+    const oldPath = path.join(MODELS_DIR, submission.filePath);
+    if (fs.existsSync(oldPath)) {
+      fs.unlinkSync(oldPath);
+    }
+
+    // Update submission with new file
+    const updatedSubmission = await prisma.submission.update({
+      where: { id: submissionId },
+      data: {
+        fileName: file.originalname,
+        filePath: file.filename,
+        fileSize: file.size,
+        updatedAt: new Date()
+      }
+    });
+
+    res.json(updatedSubmission);
+  } catch (error) {
+    console.error('Error replacing submission:', error);
+    res.status(500).json({ error: 'Failed to replace submission' });
+  }
+});
+
 // ============================================
 // LITERATURE
 // ============================================

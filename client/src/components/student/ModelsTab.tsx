@@ -10,6 +10,7 @@ interface ViewerState {
   fileUrl: string
   modelName: string
   proteinPdbId?: string
+  submissionId?: string
 }
 
 interface CommentsState {
@@ -69,7 +70,8 @@ export default function ModelsTab() {
       isOpen: true,
       fileUrl: studentApi.getModelFileUrl(submissionId),
       modelName,
-      proteinPdbId: data?.group.proteinPdbId
+      proteinPdbId: data?.group.proteinPdbId,
+      submissionId
     })
   }
 
@@ -337,6 +339,8 @@ export default function ModelsTab() {
         fileUrl={viewer.fileUrl}
         modelName={viewer.modelName}
         proteinPdbId={viewer.proteinPdbId}
+        submissionId={viewer.submissionId}
+        onSubmissionReplaced={loadModels}
       />
     </div>
   )

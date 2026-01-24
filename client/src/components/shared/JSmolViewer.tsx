@@ -38,12 +38,14 @@ interface JSmolViewerProps {
   fileUrl: string;
   modelName: string;
   proteinPdbId?: string;
+  submissionId?: string;
+  onSubmissionReplaced?: () => void;
 }
 
 type DisplayStyle = 'cartoon' | 'ribbon' | 'trace' | 'wireframe' | 'spacefill' | 'ball+stick';
 type ColorScheme = 'structure' | 'chain' | 'cpk' | 'amino' | 'temperature' | 'group';
 
-export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, proteinPdbId }: JSmolViewerProps) {
+export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, proteinPdbId, submissionId, onSubmissionReplaced }: JSmolViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const appletRef = useRef<JmolApplet | null>(null)
   const originalStateRef = useRef<{ stateCommands: string | null }>({ stateCommands: null })
@@ -54,6 +56,13 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   const [colorScheme, setColorScheme] = useState<ColorScheme>('structure')
   const [showControls, setShowControls] = useState(true)
   const [hasOriginalState, setHasOriginalState] = useState(false)
+
+  // Command console state
+  const [command, setCommand] = useState('')
+  const [commandHistory, setCommandHistory] = useState<string[]>([])
+  const [historyIndex, setHistoryIndex] = useState(-1)
+  const [commandOutput, setCommandOutput] = useState<string>('')
+  const [isReplacing, setIsReplacing] = useState(false)
 
   // Result from PNGJ extraction - now returns both PDB data and styling commands
   interface PngjResult {
@@ -513,6 +522,105 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     }
   }
 
+  // Command console handlers
+  const handleCommandSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!command.trim()) return
+
+    runScript(command.trim())
+    setCommandHistory(prev => [...prev, command.trim()])
+    setCommand('')
+    setHistoryIndex(-1)
+
+    // Capture the response message after a short delay
+    setTimeout(() => {
+      if (appletRef.current && window.Jmol) {
+        const msg = window.Jmol.evaluateVar(appletRef.current, 'message') as string
+        if (msg) {
+          setCommandOutput(msg)
+        }
+      }
+    }, 100)
+  }
+
+  const handleCommandKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      if (commandHistory.length === 0) return
+      const newIndex = historyIndex === -1 ? commandHistory.length - 1 : Math.max(0, historyIndex - 1)
+      setHistoryIndex(newIndex)
+      setCommand(commandHistory[newIndex])
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      if (historyIndex === -1) return
+      const newIndex = historyIndex + 1
+      if (newIndex >= commandHistory.length) {
+        setHistoryIndex(-1)
+        setCommand('')
+      } else {
+        setHistoryIndex(newIndex)
+        setCommand(commandHistory[newIndex])
+      }
+    }
+  }
+
+  // Replace submission with current view as PNGJ
+  const handleReplaceSubmission = async () => {
+    if (!appletRef.current || !window.Jmol || !submissionId) return
+
+    setIsReplacing(true)
+    try {
+      // Get the PNGJ data as base64
+      const pngjData = window.Jmol.evaluateVar(appletRef.current, 'write("PNGJ")') as string
+
+      if (!pngjData) {
+        throw new Error('Failed to capture PNGJ data')
+      }
+
+      // Convert base64 to blob
+      const byteCharacters = atob(pngjData)
+      const byteNumbers = new Array(byteCharacters.length)
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i)
+      }
+      const byteArray = new Uint8Array(byteNumbers)
+      const blob = new Blob([byteArray], { type: 'image/png' })
+
+      // Create form data
+      const formData = new FormData()
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')
+      const filename = `${modelName.replace(/\s+/g, '_')}_${timestamp}.pngj`
+      formData.append('file', blob, filename)
+
+      // Upload to replace endpoint
+      const token = localStorage.getItem('token')
+      const response = await fetch(`/api/student/models/${submissionId}/replace`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to replace submission')
+      }
+
+      // Notify parent component
+      if (onSubmissionReplaced) {
+        onSubmissionReplaced()
+      }
+
+      alert('Submission replaced successfully!')
+    } catch (err) {
+      console.error('Error replacing submission:', err)
+      alert(err instanceof Error ? err.message : 'Failed to replace submission')
+    } finally {
+      setIsReplacing(false)
+    }
+  }
+
   if (!isOpen) return null
 
   return (
@@ -684,6 +792,29 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
                   </div>
                 </div>
 
+                {/* Script Console */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Script Console</label>
+                  <form onSubmit={handleCommandSubmit}>
+                    <input
+                      type="text"
+                      value={command}
+                      onChange={(e) => setCommand(e.target.value)}
+                      onKeyDown={handleCommandKeyDown}
+                      placeholder="e.g., select helix; color red"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </form>
+                  {commandOutput && (
+                    <div className="mt-2 p-2 bg-gray-800 text-green-400 text-xs font-mono rounded max-h-20 overflow-y-auto">
+                      {commandOutput}
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500 mt-1">
+                    Press Enter to run. Use arrow keys for history.
+                  </p>
+                </div>
+
                 {/* Save Options */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Save</label>
@@ -706,8 +837,20 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
                       </svg>
                       Save with 3D State
                     </button>
+                    {submissionId && (
+                      <button
+                        onClick={handleReplaceSubmission}
+                        disabled={isReplacing}
+                        className="w-full px-3 py-2 bg-orange-600 text-white rounded text-sm font-medium hover:bg-orange-700 disabled:bg-orange-400 flex items-center justify-center gap-2"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        {isReplacing ? 'Replacing...' : 'Replace Submission'}
+                      </button>
+                    )}
                     <p className="text-xs text-gray-500">
-                      "Save with 3D State" creates a JPG that can be reopened in JSmol with all settings preserved.
+                      "Save with 3D State" creates a file that can be reopened in JSmol with all settings preserved.
                     </p>
                   </div>
                 </div>
