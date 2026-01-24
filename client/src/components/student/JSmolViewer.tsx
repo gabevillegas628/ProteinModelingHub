@@ -95,13 +95,15 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
           setTimeout(() => {
             if (appletRef.current && window.Jmol) {
-              // Try loading as a script/state file first (for PNGJ files)
-              // PNGJ files contain embedded Jmol state that should be executed
+              console.log('JSmol: Attempting to load file:', fileUrl)
               window.Jmol.script(appletRef.current, `
                 set antialiasDisplay ON;
                 set antialiastranslucent ON;
                 set platformSpeed 3;
-                script "${fileUrl}";
+                set logLevel 5;
+                print "Attempting to load: ${fileUrl}";
+                load "${fileUrl}";
+                print "Load command completed, atom count: " + {*}.count;
               `)
             }
           }, 500)
