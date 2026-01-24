@@ -535,35 +535,52 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     setHistoryIndex(-1)
 
     if (appletRef.current && window.Jmol) {
-      // Run command and capture output
-      // Wrap command to get feedback via echo
-      const wrappedScript = `
-        try {
-          ${cmd};
-          var _count = {selected}.count;
-          if (_count != undefined) {
-            echo format("%d atoms selected", _count);
-          }
-        } catch(e) {
-          echo e;
-        }
-      `
-      window.Jmol.script(appletRef.current, wrappedScript)
+      // Run the command
+      window.Jmol.script(appletRef.current, cmd)
 
-      // Get echo output after a delay
+      // Try to get meaningful output after command executes
       setTimeout(() => {
         if (appletRef.current && window.Jmol) {
-          const echoOutput = window.Jmol.evaluateVar(appletRef.current, '_echoBuffer') as string
-          const scriptStatus = window.Jmol.evaluateVar(appletRef.current, '_scriptStatus') as string
-          if (echoOutput) {
-            setCommandOutput(echoOutput)
-          } else if (scriptStatus) {
-            setCommandOutput(scriptStatus)
-          } else {
-            setCommandOutput('Command executed')
+          // Try multiple approaches to get output
+          let output = ''
+
+          // Check for selection count (most common feedback)
+          try {
+            const selectedCount = window.Jmol.evaluateVar(appletRef.current, '{selected}.count')
+            if (typeof selectedCount === 'number') {
+              output = `${selectedCount} atom${selectedCount !== 1 ? 's' : ''} selected`
+            }
+          } catch {
+            // Ignore errors
           }
+
+          // Check for script error message
+          if (!output) {
+            try {
+              const errorMsg = window.Jmol.evaluateVar(appletRef.current, '_errorMessage')
+              if (errorMsg && typeof errorMsg === 'string' && errorMsg.length > 0) {
+                output = `Error: ${errorMsg}`
+              }
+            } catch {
+              // Ignore errors
+            }
+          }
+
+          // Check echo buffer
+          if (!output) {
+            try {
+              const echo = window.Jmol.evaluateVar(appletRef.current, 'echo')
+              if (echo && typeof echo === 'string' && echo.length > 0) {
+                output = echo
+              }
+            } catch {
+              // Ignore errors
+            }
+          }
+
+          setCommandOutput(output || `> ${cmd}`)
         }
-      }, 150)
+      }, 200)
     }
   }
 
@@ -881,22 +898,22 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
           {commandOutput && (
             <div
               ref={consoleRef}
-              className="px-4 py-2 text-green-400 text-sm font-mono bg-gray-800 border-b border-gray-700 max-h-24 overflow-y-auto"
+              className="px-4 py-2 text-green-400 font-mono bg-gray-800 border-b border-gray-700 max-h-24 overflow-y-auto"
             >
               {commandOutput}
             </div>
           )}
-          <form onSubmit={handleCommandSubmit} className="flex items-center gap-2 p-2">
-            <span className="text-green-400 font-mono text-sm">{">"}</span>
+          <form onSubmit={handleCommandSubmit} className="flex items-center gap-3 px-4 py-3">
+            <span className="text-green-400 font-mono text-base">{">"}</span>
             <input
               type="text"
               value={command}
               onChange={(e) => setCommand(e.target.value)}
               onKeyDown={handleCommandKeyDown}
               placeholder="Enter Jmol command (e.g., select helix; color red)"
-              className="flex-1 bg-transparent text-white font-mono text-sm focus:outline-none placeholder-gray-500"
+              className="flex-1 bg-transparent text-white font-mono text-base focus:outline-none placeholder-gray-500"
             />
-            <span className="text-xs text-gray-500">↑↓ history</span>
+            <span className="text-sm text-gray-500">↑↓ history</span>
           </form>
         </div>
       </div>
