@@ -26,6 +26,7 @@ interface JmolInfo {
   disableInitialConsole?: boolean;
   allowJavaScript?: boolean;
   readyFunction?: (applet: JmolApplet) => void;
+  console?: string;
 }
 
 interface JmolApplet {
@@ -47,6 +48,7 @@ type ColorScheme = 'structure' | 'chain' | 'cpk' | 'amino' | 'temperature' | 'gr
 
 export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, proteinPdbId, submissionId, onSubmissionReplaced }: JSmolViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const consoleRef = useRef<HTMLDivElement>(null)
   const appletRef = useRef<JmolApplet | null>(null)
   const originalStateRef = useRef<{ stateCommands: string | null }>({ stateCommands: null })
   const [loading, setLoading] = useState(true)
@@ -527,20 +529,42 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     e.preventDefault()
     if (!command.trim()) return
 
-    runScript(command.trim())
-    setCommandHistory(prev => [...prev, command.trim()])
+    const cmd = command.trim()
+    setCommandHistory(prev => [...prev, cmd])
     setCommand('')
     setHistoryIndex(-1)
 
-    // Capture the response message after a short delay
-    setTimeout(() => {
-      if (appletRef.current && window.Jmol) {
-        const msg = window.Jmol.evaluateVar(appletRef.current, 'message') as string
-        if (msg) {
-          setCommandOutput(msg)
+    if (appletRef.current && window.Jmol) {
+      // Run command and capture output
+      // Wrap command to get feedback via echo
+      const wrappedScript = `
+        try {
+          ${cmd};
+          var _count = {selected}.count;
+          if (_count != undefined) {
+            echo format("%d atoms selected", _count);
+          }
+        } catch(e) {
+          echo e;
         }
-      }
-    }, 100)
+      `
+      window.Jmol.script(appletRef.current, wrappedScript)
+
+      // Get echo output after a delay
+      setTimeout(() => {
+        if (appletRef.current && window.Jmol) {
+          const echoOutput = window.Jmol.evaluateVar(appletRef.current, '_echoBuffer') as string
+          const scriptStatus = window.Jmol.evaluateVar(appletRef.current, '_scriptStatus') as string
+          if (echoOutput) {
+            setCommandOutput(echoOutput)
+          } else if (scriptStatus) {
+            setCommandOutput(scriptStatus)
+          } else {
+            setCommandOutput('Command executed')
+          }
+        }
+      }, 150)
+    }
   }
 
   const handleCommandKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -792,29 +816,6 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
                   </div>
                 </div>
 
-                {/* Script Console */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Script Console</label>
-                  <form onSubmit={handleCommandSubmit}>
-                    <input
-                      type="text"
-                      value={command}
-                      onChange={(e) => setCommand(e.target.value)}
-                      onKeyDown={handleCommandKeyDown}
-                      placeholder="e.g., select helix; color red"
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </form>
-                  {commandOutput && (
-                    <div className="mt-2 p-2 bg-gray-800 text-green-400 text-xs font-mono rounded max-h-20 overflow-y-auto">
-                      {commandOutput}
-                    </div>
-                  )}
-                  <p className="text-xs text-gray-500 mt-1">
-                    Press Enter to run. Use arrow keys for history.
-                  </p>
-                </div>
-
                 {/* Save Options */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Save</label>
@@ -875,11 +876,28 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
           )}
         </div>
 
-        {/* Footer */}
-        <div className="p-3 border-t bg-gray-50 shrink-0">
-          <p className="text-xs text-gray-500 text-center">
-            Drag to rotate • Scroll to zoom • Shift+drag to pan • Right-click for more options
-          </p>
+        {/* Script Console Footer */}
+        <div className="border-t bg-gray-900 shrink-0">
+          {commandOutput && (
+            <div
+              ref={consoleRef}
+              className="px-4 py-2 text-green-400 text-sm font-mono bg-gray-800 border-b border-gray-700 max-h-24 overflow-y-auto"
+            >
+              {commandOutput}
+            </div>
+          )}
+          <form onSubmit={handleCommandSubmit} className="flex items-center gap-2 p-2">
+            <span className="text-green-400 font-mono text-sm">{">"}</span>
+            <input
+              type="text"
+              value={command}
+              onChange={(e) => setCommand(e.target.value)}
+              onKeyDown={handleCommandKeyDown}
+              placeholder="Enter Jmol command (e.g., select helix; color red)"
+              className="flex-1 bg-transparent text-white font-mono text-sm focus:outline-none placeholder-gray-500"
+            />
+            <span className="text-xs text-gray-500">↑↓ history</span>
+          </form>
         </div>
       </div>
     </div>
