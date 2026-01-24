@@ -169,7 +169,7 @@ export default function ModelsTab() {
                 <div className="ml-4">
                   <input
                     type="file"
-                    accept=".jpg,.jpeg"
+                    accept=".jpg,.jpeg,.png"
                     ref={(el) => { fileInputRefs.current[model.id] = el }}
                     onChange={(e) => {
                       const file = e.target.files?.[0]

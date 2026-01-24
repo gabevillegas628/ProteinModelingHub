@@ -38,10 +38,10 @@ const modelUpload = multer({
   storage: modelStorage,
   fileFilter: (req, file, cb) => {
     const ext = path.extname(file.originalname).toLowerCase();
-    if (ext === '.jpg' || ext === '.jpeg') {
+    if (ext === '.jpg' || ext === '.jpeg' || ext === '.png') {
       cb(null, true);
     } else {
-      cb(new Error('Only JPG files are allowed for models'));
+      cb(new Error('Only JPG and PNG files are allowed for models'));
     }
   },
   limits: { fileSize: 10 * 1024 * 1024 } // 10MB limit
