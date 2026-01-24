@@ -53,8 +53,14 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   const [colorScheme, setColorScheme] = useState<ColorScheme>('structure')
   const [showControls, setShowControls] = useState(true)
 
+  // Result from PNGJ extraction
+  interface PngjResult {
+    type: 'state' | 'pdb' | 'pdbId';
+    data: string;
+  }
+
   // Extract molecular data from PNGJ file (PNG with embedded ZIP containing PDB/state)
-  const extractPngjData = async (url: string): Promise<string | null> => {
+  const extractPngjData = async (url: string): Promise<PngjResult | null> => {
     try {
       const response = await fetch(url)
       const arrayBuffer = await response.arrayBuffer()
@@ -83,44 +89,36 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
       const zipData = bytes.slice(zipStart)
       const zip = await JSZip.loadAsync(zipData)
 
-      // Look for molecular data files in the ZIP
-      // PNGJ files typically contain ~jmol~ folder with state.spt and possibly PDB data
-      let molecularData: string | null = null
+      // List all files in the ZIP for debugging
+      const fileList: string[] = []
+      for (const filename of Object.keys(zip.files)) {
+        fileList.push(filename)
+      }
+      console.log('Files in PNGJ ZIP:', fileList)
 
+      // PRIORITY 1: Look for state.spt - this contains the FULL state including all modifications
+      // The state script is the key to restoring the exact visual state the student created
       for (const [filename, file] of Object.entries(zip.files)) {
-        console.log('Found in ZIP:', filename)
-
-        // Look for PDB files
-        if (filename.endsWith('.pdb') || filename.endsWith('.PDB')) {
-          molecularData = await (file as JSZip.JSZipObject).async('string')
-          console.log('Found PDB data in:', filename)
-          break
-        }
-
-        // Look for state script that might contain inline PDB
         if (filename.includes('state.spt') || filename.endsWith('.spt')) {
           const stateScript = await (file as JSZip.JSZipObject).async('string')
-          console.log('Found state script:', filename)
+          console.log('Found state script:', filename, 'length:', stateScript.length)
 
-          // Check if state script contains load command with data
-          // The state script might reference external PDB or contain inline data
-          // For now, return the state script to execute
-          if (stateScript.includes('DATA "model"') || stateScript.includes('load DATA')) {
-            molecularData = stateScript
-            break
-          }
-
-          // Extract PDB ID from load command if present
-          const loadMatch = stateScript.match(/load\s+[=:](\w{4})/i)
-          if (loadMatch) {
-            console.log('Found PDB ID in state:', loadMatch[1])
-            molecularData = `=${loadMatch[1]}`
-            break
-          }
+          // The state.spt contains everything - load command, colors, display styles, etc.
+          // Return it as a state script to be executed directly
+          return { type: 'state', data: stateScript }
         }
       }
 
-      return molecularData
+      // PRIORITY 2: Look for PDB files if no state script found
+      for (const [filename, file] of Object.entries(zip.files)) {
+        if (filename.endsWith('.pdb') || filename.endsWith('.PDB')) {
+          const pdbData = await (file as JSZip.JSZipObject).async('string')
+          console.log('Found PDB data in:', filename)
+          return { type: 'pdb', data: pdbData }
+        }
+      }
+
+      return null
     } catch (err) {
       console.error('Error extracting PNGJ data:', err)
       return null
@@ -174,43 +172,57 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
           setTimeout(() => {
             if (appletRef.current && window.Jmol) {
-              let loadCommand: string
+              // Set up base rendering settings
+              const baseSettings = `
+                set antialiasDisplay ON;
+                set antialiastranslucent ON;
+                set platformSpeed 3;
+              `
 
               if (extractedData) {
-                if (extractedData.startsWith('=')) {
+                if (extractedData.type === 'state') {
+                  // State script contains EVERYTHING - load command + all visual modifications
+                  // Execute it directly without applying any additional styling
+                  console.log('Executing full state script to restore student modifications')
+                  window.Jmol.script(appletRef.current!, baseSettings + extractedData.data)
+                } else if (extractedData.type === 'pdb') {
+                  // Raw PDB data - load it and apply default styling
+                  const escapedData = extractedData.data.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+                  console.log('Loading inline PDB data with default styling')
+                  window.Jmol.script(appletRef.current!, `
+                    ${baseSettings}
+                    load DATA "model"
+                    ${escapedData}
+                    END "model";
+                    cartoon only;
+                    color structure;
+                  `)
+                } else if (extractedData.type === 'pdbId') {
                   // PDB ID reference
-                  loadCommand = `load ${extractedData};`
-                  console.log('Loading from PDB:', extractedData)
-                } else if (extractedData.includes('ATOM') || extractedData.includes('HETATM')) {
-                  // Raw PDB data - use inline loading
-                  const escapedData = extractedData.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
-                  loadCommand = `load DATA "model"\n${escapedData}\nEND "model";`
-                  console.log('Loading inline PDB data')
-                } else {
-                  // State script - execute it
-                  loadCommand = extractedData
-                  console.log('Executing state script')
+                  console.log('Loading from PDB ID:', extractedData.data)
+                  window.Jmol.script(appletRef.current!, `
+                    ${baseSettings}
+                    load =${extractedData.data};
+                    cartoon only;
+                    color structure;
+                  `)
                 }
               } else {
                 // Fallback: try loading from PDB if we have a proteinPdbId
                 if (proteinPdbId) {
-                  loadCommand = `load =${proteinPdbId};`
                   console.log('PNGJ extraction failed, loading from PDB:', proteinPdbId)
+                  window.Jmol.script(appletRef.current!, `
+                    ${baseSettings}
+                    load =${proteinPdbId};
+                    cartoon only;
+                    color structure;
+                  `)
                 } else {
                   setError('Could not extract molecular data from file. Try loading from PDB.')
                   setLoading(false)
                   return
                 }
               }
-
-              window.Jmol.script(appletRef.current, `
-                set antialiasDisplay ON;
-                set antialiastranslucent ON;
-                set platformSpeed 3;
-                ${loadCommand}
-                cartoon only;
-                color structure;
-              `)
             }
           }, 500)
         }
