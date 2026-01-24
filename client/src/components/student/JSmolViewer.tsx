@@ -99,10 +99,11 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
       for (const [filename, file] of Object.entries(zip.files)) {
         if (file.dir) continue
 
-        // Look for PDB data
-        if (filename.endsWith('.pdb') || filename.endsWith('.PDB')) {
+        // Look for molecular structure files (PDB or CIF format)
+        const lowerName = filename.toLowerCase()
+        if (lowerName.endsWith('.pdb') || lowerName.endsWith('.cif') || lowerName.endsWith('.mmcif')) {
           pdbData = await (file as JSZip.JSZipObject).async('string')
-          console.log('Found PDB data in:', filename)
+          console.log('Found molecular data in:', filename)
         }
 
         // Look for state script
