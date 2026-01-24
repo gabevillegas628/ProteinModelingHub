@@ -1,13 +1,13 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-import { PrismaClient, Role } from '@prisma/client';
+import jwt, { SignOptions } from 'jsonwebtoken';
+import { Role } from '@prisma/client';
+import { prisma } from '../lib/prisma.js';
 
 const router = Router();
-const prisma = new PrismaClient();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-me';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
+const JWT_EXPIRES_IN = (process.env.JWT_EXPIRES_IN || '7d') as SignOptions['expiresIn'];
 
 interface RegisterBody {
   email: string;
@@ -15,6 +15,7 @@ interface RegisterBody {
   firstName: string;
   lastName: string;
   role?: Role;
+  groupId?: string;
 }
 
 interface LoginBody {
@@ -22,10 +23,29 @@ interface LoginBody {
   password: string;
 }
 
+// Get available groups (public - for registration dropdown)
+router.get('/groups', async (req: Request, res: Response) => {
+  try {
+    const groups = await prisma.group.findMany({
+      select: {
+        id: true,
+        name: true,
+        proteinPdbId: true,
+        proteinName: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+    res.json(groups);
+  } catch (error) {
+    console.error('Error fetching groups:', error);
+    res.status(500).json({ error: 'Failed to fetch groups' });
+  }
+});
+
 // Register
 router.post('/register', async (req: Request<{}, {}, RegisterBody>, res: Response) => {
   try {
-    const { email, password, firstName, lastName, role = 'STUDENT' } = req.body;
+    const { email, password, firstName, lastName, role = 'STUDENT', groupId } = req.body;
 
     // Check if user exists
     const existingUser = await prisma.user.findUnique({ where: { email } });
@@ -34,17 +54,27 @@ router.post('/register', async (req: Request<{}, {}, RegisterBody>, res: Respons
       return;
     }
 
+    // Validate groupId if provided and role is STUDENT
+    if (role === 'STUDENT' && groupId) {
+      const group = await prisma.group.findUnique({ where: { id: groupId } });
+      if (!group) {
+        res.status(400).json({ error: 'Invalid group selected' });
+        return;
+      }
+    }
+
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create user
+    // Create user (not approved by default, except ADMIN role for initial setup)
     const user = await prisma.user.create({
       data: {
         email,
         password: hashedPassword,
         firstName,
         lastName,
-        role
+        role,
+        isApproved: role === 'ADMIN', // Auto-approve admins for initial setup
       },
       select: {
         id: true,
@@ -52,18 +82,35 @@ router.post('/register', async (req: Request<{}, {}, RegisterBody>, res: Respons
         firstName: true,
         lastName: true,
         role: true,
+        isApproved: true,
         createdAt: true
       }
     });
 
-    // Generate token
-    const token = jwt.sign(
-      { userId: user.id, role: user.role },
-      JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN }
-    );
+    // If student selected a group, add them as a member
+    if (role === 'STUDENT' && groupId) {
+      await prisma.groupMember.create({
+        data: {
+          userId: user.id,
+          groupId: groupId,
+        },
+      });
+    }
 
-    res.status(201).json({ user, token });
+    // Only provide token if user is approved
+    if (user.isApproved) {
+      const token = jwt.sign(
+        { userId: user.id, role: user.role },
+        JWT_SECRET,
+        { expiresIn: JWT_EXPIRES_IN }
+      );
+      res.status(201).json({ user, token });
+    } else {
+      res.status(201).json({
+        user,
+        message: 'Registration successful. Please wait for admin approval.'
+      });
+    }
   } catch (error) {
     console.error('Registration error:', error);
     res.status(500).json({ error: 'Registration failed' });
@@ -89,6 +136,12 @@ router.post('/login', async (req: Request<{}, {}, LoginBody>, res: Response) => 
       return;
     }
 
+    // Check if approved
+    if (!user.isApproved) {
+      res.status(403).json({ error: 'Account pending approval. Please contact an administrator.' });
+      return;
+    }
+
     // Generate token
     const token = jwt.sign(
       { userId: user.id, role: user.role },
@@ -102,7 +155,8 @@ router.post('/login', async (req: Request<{}, {}, LoginBody>, res: Response) => 
         email: user.email,
         firstName: user.firstName,
         lastName: user.lastName,
-        role: user.role
+        role: user.role,
+        isApproved: user.isApproved
       },
       token
     });
@@ -132,6 +186,7 @@ router.get('/me', async (req: Request, res: Response) => {
         firstName: true,
         lastName: true,
         role: true,
+        isApproved: true,
         createdAt: true
       }
     });

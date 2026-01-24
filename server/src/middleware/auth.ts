@@ -13,13 +13,24 @@ export interface AuthRequest extends Request {
 
 export const authenticate = (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    let token: string | undefined;
+
+    // Check Authorization header first
     const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
+    if (authHeader?.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    }
+
+    // Fall back to query parameter (for file downloads/embeds)
+    if (!token && req.query.token) {
+      token = req.query.token as string;
+    }
+
+    if (!token) {
       res.status(401).json({ error: 'No token provided' });
       return;
     }
 
-    const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, JWT_SECRET) as { userId: string; role: Role };
 
     req.user = decoded;

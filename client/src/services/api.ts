@@ -31,11 +31,18 @@ export interface User {
   firstName: string
   lastName: string
   role: 'ADMIN' | 'INSTRUCTOR' | 'STUDENT'
+  isApproved?: boolean
 }
 
 export interface AuthResponse {
   user: User
   token: string
+}
+
+export interface RegisterResponse {
+  user: User
+  token?: string
+  message?: string
 }
 
 export interface RegisterData {
@@ -44,6 +51,14 @@ export interface RegisterData {
   firstName: string
   lastName: string
   role?: 'ADMIN' | 'INSTRUCTOR' | 'STUDENT'
+  groupId?: string
+}
+
+export interface PublicGroup {
+  id: string
+  name: string
+  proteinPdbId: string
+  proteinName: string
 }
 
 export function login(email: string, password: string): Promise<AuthResponse> {
@@ -53,7 +68,7 @@ export function login(email: string, password: string): Promise<AuthResponse> {
   })
 }
 
-export function register(data: RegisterData): Promise<AuthResponse> {
+export function register(data: RegisterData): Promise<RegisterResponse> {
   return request('/auth/register', {
     method: 'POST',
     body: JSON.stringify(data)
@@ -62,4 +77,8 @@ export function register(data: RegisterData): Promise<AuthResponse> {
 
 export function getCurrentUser(): Promise<{ user: User }> {
   return request('/auth/me')
+}
+
+export function getPublicGroups(): Promise<PublicGroup[]> {
+  return request('/auth/groups')
 }

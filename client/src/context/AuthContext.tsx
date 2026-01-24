@@ -9,13 +9,14 @@ export interface User {
   firstName: string
   lastName: string
   role: Role
+  isApproved?: boolean
 }
 
 interface AuthContextType {
   user: User | null
   loading: boolean
   login: (email: string, password: string) => Promise<void>
-  register: (data: RegisterData) => Promise<void>
+  register: (data: RegisterData) => Promise<{ needsApproval: boolean }>
   logout: () => void
 }
 
@@ -25,6 +26,7 @@ interface RegisterData {
   firstName: string
   lastName: string
   role?: Role
+  groupId?: string
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
@@ -51,10 +53,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(data.user)
   }
 
-  const register = async (registerData: RegisterData) => {
+  const register = async (registerData: RegisterData): Promise<{ needsApproval: boolean }> => {
     const data = await api.register(registerData)
-    localStorage.setItem('token', data.token)
-    setUser(data.user)
+
+    // If we got a token, the user was auto-approved (admin)
+    if (data.token) {
+      localStorage.setItem('token', data.token)
+      setUser(data.user)
+      return { needsApproval: false }
+    }
+
+    // No token means pending approval
+    return { needsApproval: true }
   }
 
   const logout = () => {
