@@ -2,7 +2,7 @@ interface Props {
   groupId: string
 }
 
-export default function DiscussionTab({ groupId }: Props) {
+export default function DiscussionTab({ groupId: _groupId }: Props) {
   return (
     <div className="bg-white rounded-lg shadow p-8 text-center">
       <svg className="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
