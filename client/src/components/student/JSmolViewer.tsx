@@ -15,8 +15,8 @@ declare global {
 }
 
 interface JmolInfo {
-  width: number;
-  height: number;
+  width: number | string;
+  height: number | string;
   color: string;
   use: string;
   j2sPath: string;
@@ -46,12 +46,14 @@ type ColorScheme = 'structure' | 'chain' | 'cpk' | 'amino' | 'temperature' | 'gr
 export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, proteinPdbId }: JSmolViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const appletRef = useRef<JmolApplet | null>(null)
+  const originalStateRef = useRef<{ stateCommands: string | null }>({ stateCommands: null })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isSpinning, setIsSpinning] = useState(false)
   const [displayStyle, setDisplayStyle] = useState<DisplayStyle>('cartoon')
   const [colorScheme, setColorScheme] = useState<ColorScheme>('structure')
   const [showControls, setShowControls] = useState(true)
+  const [hasOriginalState, setHasOriginalState] = useState(false)
 
   // Result from PNGJ extraction - now returns both PDB data and styling commands
   interface PngjResult {
@@ -231,10 +233,11 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
         const extractedData = await extractPngjData(fileUrl)
 
         // Configure JSmol with local paths
+        // Use larger dimensions to fill more of the available space
         const Info: JmolInfo = {
-          width: 650,
-          height: 500,
-          color: '0x1a1a2e',
+          width: '100%',
+          height: '100%',
+          color: '0x111827',  // Match Tailwind's gray-900
           use: 'HTML5',
           j2sPath: '/jsmol/j2s',  // Local path
           disableJ2SLoadMonitor: true,
@@ -285,9 +288,13 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
                 if (extractedData.stateCommands) {
                   console.log('Applying styling commands from state script')
                   styleCommands = extractedData.stateCommands
+                  // Store for reset functionality
+                  originalStateRef.current = { stateCommands: extractedData.stateCommands }
+                  setHasOriginalState(true)
                 } else {
                   // No styling commands, use defaults
                   styleCommands = 'cartoon only; color structure;'
+                  setHasOriginalState(false)
                 }
               } else {
                 // No PNGJ data extracted, try fallback
@@ -363,6 +370,14 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
       setDisplayStyle('cartoon')
       setColorScheme('structure')
       setTimeout(() => setLoading(false), 2000)
+    }
+  }
+
+  const handleResetToStudentView = () => {
+    if (originalStateRef.current.stateCommands && appletRef.current && window.Jmol) {
+      console.log('Resetting to student view')
+      runScript(originalStateRef.current.stateCommands)
+      setIsSpinning(false)
     }
   }
 
@@ -463,7 +478,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
         {/* Main content */}
         <div className="flex flex-1 overflow-hidden">
           {/* Viewer */}
-          <div className="flex-1 relative bg-gray-900 flex items-center justify-center">
+          <div className="flex-1 relative bg-[#111827]">
             {loading && (
               <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75 z-10">
                 <div className="text-center">
@@ -483,7 +498,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
                 </div>
               </div>
             )}
-            <div ref={containerRef} className="jsmol-container" />
+            <div ref={containerRef} className="absolute inset-0" />
           </div>
 
           {/* Control Panel */}
@@ -557,6 +572,18 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
                       Zoom Out
                     </button>
                   </div>
+                  {/* Reset to Student View - only show if we have original state */}
+                  {hasOriginalState && (
+                    <button
+                      onClick={handleResetToStudentView}
+                      className="w-full mt-2 px-3 py-2 bg-amber-500 text-white rounded text-sm font-medium hover:bg-amber-600 flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+                      </svg>
+                      Reset to Student View
+                    </button>
+                  )}
                 </div>
 
                 {/* Quick Selections */}
