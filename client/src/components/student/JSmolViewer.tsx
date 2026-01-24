@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import JSZip from 'jszip'
 
 // Declare Jmol as a global variable (loaded from local files)
 declare global {
@@ -52,10 +53,84 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   const [colorScheme, setColorScheme] = useState<ColorScheme>('structure')
   const [showControls, setShowControls] = useState(true)
 
+  // Extract molecular data from PNGJ file (PNG with embedded ZIP containing PDB/state)
+  const extractPngjData = async (url: string): Promise<string | null> => {
+    try {
+      const response = await fetch(url)
+      const arrayBuffer = await response.arrayBuffer()
+      const bytes = new Uint8Array(arrayBuffer)
+
+      // Find the ZIP signature (PK\x03\x04) after PNG data
+      // PNG ends with IEND chunk, ZIP starts with PK signature
+      let zipStart = -1
+      for (let i = 0; i < bytes.length - 4; i++) {
+        // Look for ZIP local file header signature: 0x504B0304
+        if (bytes[i] === 0x50 && bytes[i + 1] === 0x4B &&
+            bytes[i + 2] === 0x03 && bytes[i + 3] === 0x04) {
+          zipStart = i
+          break
+        }
+      }
+
+      if (zipStart === -1) {
+        console.log('No ZIP data found in file - not a PNGJ file')
+        return null
+      }
+
+      console.log('Found ZIP data at offset:', zipStart)
+
+      // Extract ZIP portion
+      const zipData = bytes.slice(zipStart)
+      const zip = await JSZip.loadAsync(zipData)
+
+      // Look for molecular data files in the ZIP
+      // PNGJ files typically contain ~jmol~ folder with state.spt and possibly PDB data
+      let molecularData: string | null = null
+
+      for (const [filename, file] of Object.entries(zip.files)) {
+        console.log('Found in ZIP:', filename)
+
+        // Look for PDB files
+        if (filename.endsWith('.pdb') || filename.endsWith('.PDB')) {
+          molecularData = await (file as JSZip.JSZipObject).async('string')
+          console.log('Found PDB data in:', filename)
+          break
+        }
+
+        // Look for state script that might contain inline PDB
+        if (filename.includes('state.spt') || filename.endsWith('.spt')) {
+          const stateScript = await (file as JSZip.JSZipObject).async('string')
+          console.log('Found state script:', filename)
+
+          // Check if state script contains load command with data
+          // The state script might reference external PDB or contain inline data
+          // For now, return the state script to execute
+          if (stateScript.includes('DATA "model"') || stateScript.includes('load DATA')) {
+            molecularData = stateScript
+            break
+          }
+
+          // Extract PDB ID from load command if present
+          const loadMatch = stateScript.match(/load\s+[=:](\w{4})/i)
+          if (loadMatch) {
+            console.log('Found PDB ID in state:', loadMatch[1])
+            molecularData = `=${loadMatch[1]}`
+            break
+          }
+        }
+      }
+
+      return molecularData
+    } catch (err) {
+      console.error('Error extracting PNGJ data:', err)
+      return null
+    }
+  }
+
   useEffect(() => {
     if (!isOpen || !containerRef.current) return
 
-    const initJSmol = () => {
+    const initJSmol = async () => {
       if (!window.Jmol) {
         setError('JSmol library not loaded. Please refresh the page.')
         setLoading(false)
@@ -69,6 +144,10 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
         if (containerRef.current) {
           containerRef.current.innerHTML = ''
         }
+
+        // Try to extract PNGJ data first
+        console.log('Attempting to extract PNGJ data from:', fileUrl)
+        const extractedData = await extractPngjData(fileUrl)
 
         // Configure JSmol with local paths
         const Info: JmolInfo = {
@@ -95,15 +174,42 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
           setTimeout(() => {
             if (appletRef.current && window.Jmol) {
-              console.log('JSmol: Attempting to load file:', fileUrl)
+              let loadCommand: string
+
+              if (extractedData) {
+                if (extractedData.startsWith('=')) {
+                  // PDB ID reference
+                  loadCommand = `load ${extractedData};`
+                  console.log('Loading from PDB:', extractedData)
+                } else if (extractedData.includes('ATOM') || extractedData.includes('HETATM')) {
+                  // Raw PDB data - use inline loading
+                  const escapedData = extractedData.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+                  loadCommand = `load DATA "model"\n${escapedData}\nEND "model";`
+                  console.log('Loading inline PDB data')
+                } else {
+                  // State script - execute it
+                  loadCommand = extractedData
+                  console.log('Executing state script')
+                }
+              } else {
+                // Fallback: try loading from PDB if we have a proteinPdbId
+                if (proteinPdbId) {
+                  loadCommand = `load =${proteinPdbId};`
+                  console.log('PNGJ extraction failed, loading from PDB:', proteinPdbId)
+                } else {
+                  setError('Could not extract molecular data from file. Try loading from PDB.')
+                  setLoading(false)
+                  return
+                }
+              }
+
               window.Jmol.script(appletRef.current, `
                 set antialiasDisplay ON;
                 set antialiastranslucent ON;
                 set platformSpeed 3;
-                set logLevel 5;
-                print "Attempting to load: ${fileUrl}";
-                load "${fileUrl}";
-                print "Load command completed, atom count: " + {*}.count;
+                ${loadCommand}
+                cartoon only;
+                color structure;
               `)
             }
           }, 500)
@@ -135,7 +241,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
       return () => clearInterval(checkInterval)
     }
-  }, [isOpen, fileUrl])
+  }, [isOpen, fileUrl, proteinPdbId])
 
   useEffect(() => {
     if (!isOpen && appletRef.current) {
