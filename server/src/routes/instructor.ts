@@ -16,33 +16,16 @@ const UPLOAD_BASE = path.join(process.cwd(), 'uploads');
 const MODELS_DIR = path.join(UPLOAD_BASE, 'models');
 const LITERATURE_DIR = path.join(UPLOAD_BASE, 'literature');
 
-// Helper to get instructor's groups
-async function getInstructorGroups(userId: string) {
-  const memberships = await prisma.groupMember.findMany({
-    where: { userId },
-    include: {
-      group: true
-    }
-  });
-  return memberships.map(m => m.group);
-}
-
-// Helper to verify instructor has access to a group
-async function hasGroupAccess(userId: string, groupId: string): Promise<boolean> {
-  const membership = await prisma.groupMember.findFirst({
-    where: { userId, groupId }
-  });
-  return !!membership;
-}
-
 // ============================================
 // GROUPS
 // ============================================
 
-// Get all groups instructor is a member of
-router.get('/groups', async (req: AuthRequest, res: Response) => {
+// Get all groups (instructors can see all groups)
+router.get('/groups', async (_req: AuthRequest, res: Response) => {
   try {
-    const groups = await getInstructorGroups(req.user!.userId);
+    const groups = await prisma.group.findMany({
+      orderBy: { name: 'asc' }
+    });
 
     // Get submission counts for each group
     const groupsWithStats = await Promise.all(
@@ -78,11 +61,6 @@ router.get('/groups/:groupId', async (req: AuthRequest, res: Response) => {
   try {
     const groupId = req.params.groupId as string;
 
-    if (!await hasGroupAccess(req.user!.userId, groupId)) {
-      res.status(403).json({ error: 'You do not have access to this group' });
-      return;
-    }
-
     const group = await prisma.group.findUnique({
       where: { id: groupId },
       include: {
@@ -117,8 +95,10 @@ router.get('/groups/:groupId/submissions', async (req: AuthRequest, res: Respons
   try {
     const groupId = req.params.groupId as string;
 
-    if (!await hasGroupAccess(req.user!.userId, groupId)) {
-      res.status(403).json({ error: 'You do not have access to this group' });
+    // Verify group exists
+    const group = await prisma.group.findUnique({ where: { id: groupId } });
+    if (!group) {
+      res.status(404).json({ error: 'Group not found' });
       return;
     }
 
@@ -169,12 +149,6 @@ router.get('/submissions/file/:submissionId', async (req: AuthRequest, res: Resp
       return;
     }
 
-    // Verify instructor has access to this group
-    if (!await hasGroupAccess(req.user!.userId, submission.groupId)) {
-      res.status(403).json({ error: 'You do not have access to this submission' });
-      return;
-    }
-
     const filePath = path.join(MODELS_DIR, submission.filePath);
     if (!fs.existsSync(filePath)) {
       res.status(404).json({ error: 'File not found' });
@@ -200,12 +174,6 @@ router.patch('/submissions/:submissionId', async (req: AuthRequest, res: Respons
 
     if (!submission) {
       res.status(404).json({ error: 'Submission not found' });
-      return;
-    }
-
-    // Verify instructor has access to this group
-    if (!await hasGroupAccess(req.user!.userId, submission.groupId)) {
-      res.status(403).json({ error: 'You do not have access to this submission' });
       return;
     }
 
@@ -241,8 +209,10 @@ router.get('/groups/:groupId/literature', async (req: AuthRequest, res: Response
   try {
     const groupId = req.params.groupId as string;
 
-    if (!await hasGroupAccess(req.user!.userId, groupId)) {
-      res.status(403).json({ error: 'You do not have access to this group' });
+    // Verify group exists
+    const group = await prisma.group.findUnique({ where: { id: groupId } });
+    if (!group) {
+      res.status(404).json({ error: 'Group not found' });
       return;
     }
 
@@ -274,12 +244,6 @@ router.get('/literature/file/:id', async (req: AuthRequest, res: Response) => {
 
     if (!literature) {
       res.status(404).json({ error: 'Literature not found' });
-      return;
-    }
-
-    // Verify instructor has access to this group
-    if (!await hasGroupAccess(req.user!.userId, literature.groupId)) {
-      res.status(403).json({ error: 'You do not have access to this literature' });
       return;
     }
 
