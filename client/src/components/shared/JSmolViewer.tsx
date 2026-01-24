@@ -519,7 +519,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full mx-4 overflow-hidden max-h-[95vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b bg-gray-50 flex-shrink-0">
+        <div className="flex items-center justify-between p-4 border-b bg-gray-50 shrink-0">
           <div>
             <h3 className="text-lg font-semibold text-gray-800">{modelName}</h3>
             <p className="text-sm text-gray-500">3D Molecular Viewer {proteinPdbId && `• ${proteinPdbId}`}</p>
@@ -570,7 +570,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
           {/* Control Panel */}
           {showControls && (
-            <div className="w-64 bg-gray-50 border-l overflow-y-auto flex-shrink-0">
+            <div className="w-64 bg-gray-50 border-l overflow-y-auto shrink-0">
               <div className="p-4 space-y-5">
                 {/* Display Style */}
                 <div>
@@ -733,7 +733,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
         </div>
 
         {/* Footer */}
-        <div className="p-3 border-t bg-gray-50 flex-shrink-0">
+        <div className="p-3 border-t bg-gray-50 shrink-0">
           <p className="text-xs text-gray-500 text-center">
             Drag to rotate • Scroll to zoom • Shift+drag to pan • Right-click for more options
           </p>
