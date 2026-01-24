@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-// Declare Jmol as a global variable (loaded from local files)
+// Declare Jmol as a global variable (loaded from CDN)
 declare global {
   interface Window {
     Jmol: {
@@ -70,13 +70,13 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
           containerRef.current.innerHTML = ''
         }
 
-        // Configure JSmol with LOCAL paths
+        // Configure JSmol with CDN paths
         const Info: JmolInfo = {
           width: 650,
           height: 500,
           color: '0x1a1a2e',
           use: 'HTML5',
-          j2sPath: '/jsmol/j2s',  // Local path
+          j2sPath: 'https://chemapps.stolaf.edu/jmol/jsmol/j2s',  // CDN path
           disableJ2SLoadMonitor: true,
           disableInitialConsole: true,
           allowJavaScript: true,
