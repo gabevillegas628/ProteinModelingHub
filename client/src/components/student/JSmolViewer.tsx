@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 
-// Declare Jmol as a global variable (loaded from CDN)
+// Declare Jmol as a global variable (loaded from local files)
 declare global {
   interface Window {
     Jmol: {
@@ -70,13 +70,13 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
           containerRef.current.innerHTML = ''
         }
 
-        // Configure JSmol with CDN paths
+        // Configure JSmol with local paths
         const Info: JmolInfo = {
           width: 650,
           height: 500,
           color: '0x1a1a2e',
           use: 'HTML5',
-          j2sPath: 'https://chemapps.stolaf.edu/jmol/jsmol/j2s',  // CDN path
+          j2sPath: '/jsmol/j2s',  // Local path
           disableJ2SLoadMonitor: true,
           disableInitialConsole: true,
           allowJavaScript: true,
@@ -95,11 +95,13 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
           setTimeout(() => {
             if (appletRef.current && window.Jmol) {
+              // Try loading as a script/state file first (for PNGJ files)
+              // PNGJ files contain embedded Jmol state that should be executed
               window.Jmol.script(appletRef.current, `
                 set antialiasDisplay ON;
                 set antialiastranslucent ON;
                 set platformSpeed 3;
-                load "${fileUrl}";
+                script "${fileUrl}";
               `)
             }
           }, 500)
