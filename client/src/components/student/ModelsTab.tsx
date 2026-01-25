@@ -10,7 +10,6 @@ interface ViewerState {
   fileUrl: string
   modelName: string
   proteinPdbId?: string
-  submissionId?: string
 }
 
 interface CommentsState {
@@ -70,8 +69,7 @@ export default function ModelsTab() {
       isOpen: true,
       fileUrl: studentApi.getModelFileUrl(submissionId),
       modelName,
-      proteinPdbId: data?.group.proteinPdbId,
-      submissionId
+      proteinPdbId: data?.group.proteinPdbId
     })
   }
 
@@ -262,7 +260,7 @@ export default function ModelsTab() {
                   <div className="mt-4 pt-4 border-t border-gray-100">
                     <div className="flex gap-4 items-start">
                       <img
-                        src={studentApi.getModelFileUrl(model.submission.id)}
+                        src={`${studentApi.getModelFileUrl(model.submission.id)}&t=${new Date(model.submission.updatedAt).getTime()}`}
                         alt={model.name}
                         className="max-w-sm h-auto rounded-md border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity"
                         style={{ maxHeight: '250px' }}
@@ -339,8 +337,6 @@ export default function ModelsTab() {
         fileUrl={viewer.fileUrl}
         modelName={viewer.modelName}
         proteinPdbId={viewer.proteinPdbId}
-        submissionId={viewer.submissionId}
-        onSubmissionReplaced={loadModels}
       />
     </div>
   )

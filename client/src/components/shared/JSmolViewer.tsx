@@ -40,14 +40,12 @@ interface JSmolViewerProps {
   fileUrl: string;
   modelName: string;
   proteinPdbId?: string;
-  submissionId?: string;
-  onSubmissionReplaced?: () => void;
 }
 
 type DisplayStyle = 'cartoon' | 'ribbon' | 'trace' | 'wireframe' | 'spacefill' | 'ball+stick';
 type ColorScheme = 'structure' | 'chain' | 'cpk' | 'amino' | 'temperature' | 'group';
 
-export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, proteinPdbId, submissionId, onSubmissionReplaced }: JSmolViewerProps) {
+export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, proteinPdbId }: JSmolViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const consoleRef = useRef<HTMLDivElement>(null)
   const appletRef = useRef<JmolApplet | null>(null)
@@ -65,7 +63,6 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   const [commandHistory, setCommandHistory] = useState<string[]>([])
   const [historyIndex, setHistoryIndex] = useState(-1)
   const [commandOutput, setCommandOutput] = useState<string>('')
-  const [isReplacing, setIsReplacing] = useState(false)
 
   useEffect(() => {
     if (!isOpen || !containerRef.current) return
@@ -319,95 +316,18 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     }
   }
 
-  // Replace submission with current view as PNGJ using JSmol's native write command
-  const handleReplaceSubmission = async () => {
-    if (!appletRef.current || !window.Jmol || !submissionId) return
+  // Export current view as PNGJ file (triggers download)
+  const handleExportPngj = () => {
+    if (!appletRef.current || !window.Jmol) return
 
-    setIsReplacing(true)
-    try {
-      // Use JSmol's native "write ... as pngj" command
-      // We intercept the download by temporarily patching the anchor click mechanism
-      const pngjBlob = await new Promise<Blob>((resolve, reject) => {
-        let capturedBlob: Blob | null = null
-        let timeoutId: ReturnType<typeof setTimeout>
+    // Generate filename with model name and timestamp
+    const timestamp = new Date().toISOString().slice(0, 10)
+    const safeName = modelName.replace(/[^a-zA-Z0-9]/g, '_')
+    const filename = `${safeName}_${timestamp}.png`
 
-        // Intercept anchor element clicks to capture the download
-        const originalClick = HTMLAnchorElement.prototype.click
-        HTMLAnchorElement.prototype.click = function(this: HTMLAnchorElement) {
-          if (this.download && this.href.startsWith('blob:')) {
-            // This is JSmol trying to download - capture the blob
-            fetch(this.href)
-              .then(r => r.blob())
-              .then(blob => {
-                capturedBlob = blob
-                console.log('Captured PNGJ blob from JSmol:', blob.size, 'bytes')
-                // Restore original click and resolve
-                HTMLAnchorElement.prototype.click = originalClick
-                clearTimeout(timeoutId)
-                resolve(blob)
-              })
-              .catch(err => {
-                HTMLAnchorElement.prototype.click = originalClick
-                reject(err)
-              })
-            // Don't actually trigger the download
-            return
-          }
-          // For other clicks, use original behavior
-          originalClick.call(this)
-        }
-
-        // Set a timeout in case the write command doesn't trigger a download
-        timeoutId = setTimeout(() => {
-          HTMLAnchorElement.prototype.click = originalClick
-          if (capturedBlob) {
-            resolve(capturedBlob)
-          } else {
-            reject(new Error('Timeout waiting for PNGJ data from JSmol'))
-          }
-        }, 5000)
-
-        // Execute the write command - JSmol will try to download the file
-        const filename = `export_${Date.now()}.png`
-        console.log('Executing JSmol write command:', `write "${filename}" as pngj`)
-        window.Jmol.script(appletRef.current!, `write "${filename}" as pngj`)
-      })
-
-      console.log('Got PNGJ blob:', pngjBlob.size, 'bytes')
-
-      // Create form data
-      const formData = new FormData()
-      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')
-      const filename = `${modelName.replace(/\s+/g, '_')}_${timestamp}.png`
-      formData.append('file', pngjBlob, filename)
-
-      // Upload to replace endpoint
-      const token = localStorage.getItem('token')
-      const response = await fetch(`/api/student/models/${submissionId}/replace`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || 'Failed to replace submission')
-      }
-
-      // Notify parent component
-      if (onSubmissionReplaced) {
-        onSubmissionReplaced()
-      }
-
-      alert('Submission replaced successfully!')
-    } catch (err) {
-      console.error('Error replacing submission:', err)
-      alert(err instanceof Error ? err.message : 'Failed to replace submission')
-    } finally {
-      setIsReplacing(false)
-    }
+    // Use JSmol's native write command to create and download PNGJ
+    console.log('Exporting PNGJ:', filename)
+    window.Jmol.script(appletRef.current, `write "${filename}" as pngj`)
   }
 
   if (!isOpen) return null
@@ -581,25 +501,22 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
                   </div>
                 </div>
 
-                {/* Replace Submission */}
-                {submissionId && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Update Submission</label>
-                    <button
-                      onClick={handleReplaceSubmission}
-                      disabled={isReplacing}
-                      className="w-full px-3 py-2 bg-orange-600 text-white rounded text-sm font-medium hover:bg-orange-700 disabled:bg-orange-400 flex items-center justify-center gap-2"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      {isReplacing ? 'Replacing...' : 'Replace Submission'}
-                    </button>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Save current view as a PNGJ file and replace your submission.
-                    </p>
-                  </div>
-                )}
+                {/* Export PNGJ */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">Export View</label>
+                  <button
+                    onClick={handleExportPngj}
+                    className="w-full px-3 py-2 bg-orange-600 text-white rounded text-sm font-medium hover:bg-orange-700 flex items-center justify-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    Download PNGJ
+                  </button>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Download current view as a PNGJ file to re-upload.
+                  </p>
+                </div>
 
                 {/* Load from PDB */}
                 {proteinPdbId && (

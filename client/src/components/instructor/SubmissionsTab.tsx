@@ -228,7 +228,7 @@ export default function SubmissionsTab({ groupId, proteinPdbId }: Props) {
                       {/* Image and Viewer */}
                       <div className="flex gap-4 items-start mb-4">
                         <img
-                          src={instructorApi.getSubmissionFileUrl(model.submission.id)}
+                          src={`${instructorApi.getSubmissionFileUrl(model.submission.id)}&t=${new Date(model.submission.updatedAt).getTime()}`}
                           alt={model.name}
                           className="max-w-md h-auto rounded-md border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity"
                           style={{ maxHeight: '300px' }}
