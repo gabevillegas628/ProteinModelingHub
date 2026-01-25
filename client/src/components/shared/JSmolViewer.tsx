@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import JSZip from 'jszip'
 
 // Declare Jmol as a global variable (loaded from local files)
 declare global {
@@ -320,96 +319,67 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     }
   }
 
-  // Replace submission with current view as PNGJ
+  // Replace submission with current view as PNGJ using JSmol's native write command
   const handleReplaceSubmission = async () => {
     if (!appletRef.current || !window.Jmol || !submissionId) return
 
     setIsReplacing(true)
     try {
-      // PNGJ format = PNG image + embedded ZIP with state script
-      // We need to get both the PNG image AND the state, then combine them
+      // Use JSmol's native "write ... as pngj" command
+      // We intercept the download by temporarily patching the anchor click mechanism
+      const pngjBlob = await new Promise<Blob>((resolve, reject) => {
+        let capturedBlob: Blob | null = null
+        let timeoutId: ReturnType<typeof setTimeout>
 
-      let imageData: string | null = null
-      let stateScript: string | null = null
-
-      // Step 1: Get the PNG image using getPropertyAsString
-      try {
-        // This returns base64-encoded PNG data
-        const pngBase64 = window.Jmol.getPropertyAsString(appletRef.current, 'image', 'PNG')
-        if (pngBase64 && pngBase64.length > 100) {
-          imageData = pngBase64
-          console.log('Got PNG image data, length:', pngBase64.length)
-        }
-      } catch (e) {
-        console.log('getPropertyAsString for PNG failed:', e)
-      }
-
-      // Step 2: Get the current state script
-      try {
-        const state = window.Jmol.getPropertyAsString(appletRef.current, 'stateInfo', '')
-        if (state && state.length > 0) {
-          stateScript = state
-          console.log('Got state script, length:', state.length)
-        }
-      } catch (e) {
-        console.log('getPropertyAsString for state failed:', e)
-      }
-
-      // Fallback for state: try evaluateVar
-      if (!stateScript) {
-        try {
-          const state = window.Jmol.evaluateVar(appletRef.current, 'write("state")')
-          if (state && typeof state === 'string' && state.length > 0) {
-            stateScript = state
-            console.log('Got state via evaluateVar, length:', state.length)
+        // Intercept anchor element clicks to capture the download
+        const originalClick = HTMLAnchorElement.prototype.click
+        HTMLAnchorElement.prototype.click = function(this: HTMLAnchorElement) {
+          if (this.download && this.href.startsWith('blob:')) {
+            // This is JSmol trying to download - capture the blob
+            fetch(this.href)
+              .then(r => r.blob())
+              .then(blob => {
+                capturedBlob = blob
+                console.log('Captured PNGJ blob from JSmol:', blob.size, 'bytes')
+                // Restore original click and resolve
+                HTMLAnchorElement.prototype.click = originalClick
+                clearTimeout(timeoutId)
+                resolve(blob)
+              })
+              .catch(err => {
+                HTMLAnchorElement.prototype.click = originalClick
+                reject(err)
+              })
+            // Don't actually trigger the download
+            return
           }
-        } catch (e) {
-          console.log('evaluateVar for state failed:', e)
+          // For other clicks, use original behavior
+          originalClick.call(this)
         }
-      }
 
-      if (!imageData) {
-        throw new Error('Failed to capture image from viewer')
-      }
+        // Set a timeout in case the write command doesn't trigger a download
+        timeoutId = setTimeout(() => {
+          HTMLAnchorElement.prototype.click = originalClick
+          if (capturedBlob) {
+            resolve(capturedBlob)
+          } else {
+            reject(new Error('Timeout waiting for PNGJ data from JSmol'))
+          }
+        }, 5000)
 
-      // Decode the PNG image
-      let base64Data = imageData
-      if (base64Data.startsWith('data:')) {
-        base64Data = base64Data.split(',')[1]
-      }
-      const pngBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0))
-      console.log('PNG image size:', pngBytes.length, 'bytes')
+        // Execute the write command - JSmol will try to download the file
+        const filename = `export_${Date.now()}.png`
+        console.log('Executing JSmol write command:', `write "${filename}" as pngj`)
+        window.Jmol.script(appletRef.current!, `write "${filename}" as pngj`)
+      })
 
-      let finalBlob: Blob
-
-      if (stateScript) {
-        // Create PNGJ: PNG + ZIP containing state script
-        // The ZIP is appended after the PNG IEND chunk
-        const zip = new JSZip()
-        zip.file('state.spt', stateScript)
-
-        const zipData = await zip.generateAsync({ type: 'uint8array' })
-        console.log('ZIP state data size:', zipData.length, 'bytes')
-
-        // Combine PNG + ZIP to create PNGJ
-        const pngjBytes = new Uint8Array(pngBytes.length + zipData.length)
-        pngjBytes.set(pngBytes, 0)
-        pngjBytes.set(zipData, pngBytes.length)
-
-        finalBlob = new Blob([pngjBytes], { type: 'image/png' })
-        console.log('Created PNGJ, total size:', finalBlob.size, 'bytes')
-      } else {
-        // No state available, just use the PNG
-        console.warn('No state script available, saving as plain PNG')
-        finalBlob = new Blob([pngBytes], { type: 'image/png' })
-      }
+      console.log('Got PNGJ blob:', pngjBlob.size, 'bytes')
 
       // Create form data
       const formData = new FormData()
       const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')
-      // Use .png extension - PNGJ files are valid PNGs with embedded state data
       const filename = `${modelName.replace(/\s+/g, '_')}_${timestamp}.png`
-      formData.append('file', finalBlob, filename)
+      formData.append('file', pngjBlob, filename)
 
       // Upload to replace endpoint
       const token = localStorage.getItem('token')
