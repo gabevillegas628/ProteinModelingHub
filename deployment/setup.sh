@@ -228,15 +228,15 @@ create_admin() {
 
     cd "$INSTANCE_DIR/server"
 
-    # Hash password using node
-    HASHED_PASSWORD=$(node -e "
+    # Hash password using node (use --input-type=commonjs to avoid ESM issues)
+    HASHED_PASSWORD=$(node --input-type=commonjs -e "
         const bcrypt = require('bcryptjs');
         const hash = bcrypt.hashSync('$ADMIN_PASSWORD', 10);
         console.log(hash);
     ")
 
-    # Create admin user script
-    cat > create-admin.js << EOF
+    # Create admin user script (use .cjs extension for CommonJS in ESM project)
+    cat > create-admin.cjs << EOF
 const { PrismaClient } = require('@prisma/client');
 
 async function createAdmin() {
@@ -273,8 +273,8 @@ async function createAdmin() {
 createAdmin();
 EOF
 
-    node create-admin.js
-    rm create-admin.js
+    node create-admin.cjs
+    rm create-admin.cjs
 
     echo "Admin account: $ADMIN_EMAIL"
 }
