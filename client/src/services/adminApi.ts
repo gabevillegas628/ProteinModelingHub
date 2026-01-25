@@ -182,3 +182,70 @@ export function updateUser(id: string, data: Partial<User> & { password?: string
 export function deleteUser(id: string): Promise<{ success: boolean }> {
   return request(`/users/${id}`, { method: 'DELETE' });
 }
+
+// ============================================
+// Nuclear Reset
+// ============================================
+
+export interface ResetPreview {
+  toDelete: {
+    groups: number;
+    students: number;
+    submissions: number;
+    messages: number;
+    literature: number;
+    filesOnDisk: number;
+  };
+  toPreserve: {
+    admins: number;
+    instructors: number;
+    modelTemplates: number;
+  };
+  confirmationCode: string;
+}
+
+export interface ResetResult {
+  success: boolean;
+  deleted: {
+    groups: number;
+    students: number;
+    submissions: number;
+    messages: number;
+    literature: number;
+    filesRemoved: number;
+  };
+}
+
+export function getResetPreview(): Promise<ResetPreview> {
+  return request('/nuclear-reset/preview');
+}
+
+export function executeReset(confirmationCode: string): Promise<ResetResult> {
+  return request('/nuclear-reset/execute', {
+    method: 'POST',
+    body: JSON.stringify({ confirmationCode })
+  });
+}
+
+export async function downloadArchive(): Promise<void> {
+  const token = localStorage.getItem('token');
+  const response = await fetch(`${API_BASE}/nuclear-reset/archive`, {
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to download archive');
+  }
+
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `archive-${new Date().toISOString().split('T')[0]}.zip`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}

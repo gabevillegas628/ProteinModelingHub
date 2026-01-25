@@ -3,18 +3,21 @@ import { useAuth } from '../context/AuthContext'
 import ModelTemplatesTab from '../components/admin/ModelTemplatesTab'
 import GroupsTab from '../components/admin/GroupsTab'
 import UsersTab from '../components/admin/UsersTab'
+import DangerZoneTab from '../components/admin/DangerZoneTab'
 
-type TabId = 'models' | 'groups' | 'users'
+type TabId = 'models' | 'groups' | 'users' | 'danger'
 
 interface Tab {
   id: TabId
   label: string
+  danger?: boolean
 }
 
 const tabs: Tab[] = [
   { id: 'models', label: 'Model Templates' },
   { id: 'groups', label: 'Groups' },
   { id: 'users', label: 'Users' },
+  { id: 'danger', label: 'Danger Zone', danger: true },
 ]
 
 export default function Admin() {
@@ -64,8 +67,12 @@ export default function Admin() {
                 className={`
                   py-4 px-1 border-b-2 font-medium text-sm transition-colors
                   ${activeTab === tab.id
-                    ? 'border-blue-500 text-blue-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    ? tab.danger
+                      ? 'border-red-500 text-red-600'
+                      : 'border-blue-500 text-blue-600'
+                    : tab.danger
+                      ? 'border-transparent text-red-400 hover:text-red-600 hover:border-red-300'
+                      : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
                   }
                 `}
               >
@@ -81,6 +88,7 @@ export default function Admin() {
         {activeTab === 'models' && <ModelTemplatesTab />}
         {activeTab === 'groups' && <GroupsTab />}
         {activeTab === 'users' && <UsersTab />}
+        {activeTab === 'danger' && <DangerZoneTab />}
       </main>
     </div>
   )
