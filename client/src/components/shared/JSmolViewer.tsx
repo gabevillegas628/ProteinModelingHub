@@ -217,24 +217,28 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
         }
 
         // Look for inline DATA blocks - this is how PNGJ often stores molecular data
-        // Format: load DATA "modelname" ... END "modelname"
-        const dataBlockMatch = stateScript.match(/load\s+DATA\s+"([^"]+)"\s*([\s\S]*?)\s*END\s+"\1"/i)
-        if (dataBlockMatch && !pdbData) {
-          const blockContent = dataBlockMatch[2].trim()
-          if (blockContent.includes('ATOM') || blockContent.includes('HETATM') || blockContent.includes('HEADER')) {
-            pdbData = blockContent
-            console.log('Found inline PDB data in state script DATA block, length:', pdbData.length)
-          }
-        }
-
-        // Also check for the alternate format: data "model" ... end "model" (lowercase)
+        // Formats:
+        //   load DATA "model" ... END "model"
+        //   load /*data*/ data "model" ... end "model"
+        //   data "model" ... end "model"
+        // Use indexOf for large content instead of regex (more efficient)
         if (!pdbData) {
-          const dataBlockMatch2 = stateScript.match(/data\s+"([^"]+)"\s*([\s\S]*?)\s*end\s+"\1"/i)
-          if (dataBlockMatch2) {
-            const blockContent = dataBlockMatch2[2].trim()
-            if (blockContent.includes('ATOM') || blockContent.includes('HETATM') || blockContent.includes('HEADER')) {
-              pdbData = blockContent
-              console.log('Found inline PDB data (alt format), length:', pdbData.length)
+          // Find the data block start - look for 'data "model"' pattern
+          const dataStartMatch = stateScript.match(/data\s+"([^"]+)"/i)
+          if (dataStartMatch) {
+            const modelName = dataStartMatch[1]
+            const dataStartIdx = dataStartMatch.index! + dataStartMatch[0].length
+
+            // Find the matching end marker
+            const endPattern = new RegExp(`end\\s+"${modelName}"`, 'i')
+            const endMatch = stateScript.slice(dataStartIdx).match(endPattern)
+
+            if (endMatch && endMatch.index !== undefined) {
+              const blockContent = stateScript.slice(dataStartIdx, dataStartIdx + endMatch.index).trim()
+              if (blockContent.includes('ATOM') || blockContent.includes('HETATM') || blockContent.includes('HEADER')) {
+                pdbData = blockContent
+                console.log('Found inline PDB data in state script, length:', pdbData.length)
+              }
             }
           }
         }
@@ -593,62 +597,90 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
     setIsReplacing(true)
     try {
-      // In JSmol HTML5 mode, use write("base64:PNGJ") to get PNGJ data as base64
       // PNGJ format = PNG image + embedded ZIP with state script
-      let pngjBase64: string | null = null
+      // We need to get both the PNG image AND the state, then combine them
 
-      // Primary approach: Use evaluateVar with base64:PNGJ format
-      // This tells JSmol to return the PNGJ data as a base64-encoded string
+      let imageData: string | null = null
+      let stateScript: string | null = null
+
+      // Step 1: Get the PNG image using getPropertyAsString
       try {
-        const result = window.Jmol.evaluateVar(appletRef.current, 'write("base64:PNGJ")')
-        if (result && typeof result === 'string' && result.length > 0) {
-          pngjBase64 = result
-          console.log('Got PNGJ data via base64:PNGJ, length:', result.length)
+        // This returns base64-encoded PNG data
+        const pngBase64 = window.Jmol.getPropertyAsString(appletRef.current, 'image', 'PNG')
+        if (pngBase64 && pngBase64.length > 100) {
+          imageData = pngBase64
+          console.log('Got PNG image data, length:', pngBase64.length)
         }
       } catch (e) {
-        console.log('base64:PNGJ approach failed:', e)
+        console.log('getPropertyAsString for PNG failed:', e)
       }
 
-      // Fallback: Try without base64 prefix (some versions return base64 anyway)
-      if (!pngjBase64) {
+      // Step 2: Get the current state script
+      try {
+        const state = window.Jmol.getPropertyAsString(appletRef.current, 'stateInfo', '')
+        if (state && state.length > 0) {
+          stateScript = state
+          console.log('Got state script, length:', state.length)
+        }
+      } catch (e) {
+        console.log('getPropertyAsString for state failed:', e)
+      }
+
+      // Fallback for state: try evaluateVar
+      if (!stateScript) {
         try {
-          const result = window.Jmol.evaluateVar(appletRef.current, 'write("PNGJ")')
-          if (result && typeof result === 'string' && result.length > 0) {
-            pngjBase64 = result
-            console.log('Got PNGJ data via write("PNGJ"), length:', result.length)
+          const state = window.Jmol.evaluateVar(appletRef.current, 'write("state")')
+          if (state && typeof state === 'string' && state.length > 0) {
+            stateScript = state
+            console.log('Got state via evaluateVar, length:', state.length)
           }
         } catch (e) {
-          console.log('write("PNGJ") approach failed:', e)
+          console.log('evaluateVar for state failed:', e)
         }
       }
 
-      if (!pngjBase64) {
-        throw new Error('Failed to capture PNGJ data from viewer. The viewer may not support this export format.')
+      if (!imageData) {
+        throw new Error('Failed to capture image from viewer')
       }
 
-      // Convert base64 to blob
-      // Handle potential "data:image/png;base64," prefix
-      let base64Data = pngjBase64
+      // Decode the PNG image
+      let base64Data = imageData
       if (base64Data.startsWith('data:')) {
         base64Data = base64Data.split(',')[1]
       }
+      const pngBytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0))
+      console.log('PNG image size:', pngBytes.length, 'bytes')
 
-      const byteCharacters = atob(base64Data)
-      const byteNumbers = new Uint8Array(byteCharacters.length)
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i)
+      let finalBlob: Blob
+
+      if (stateScript) {
+        // Create PNGJ: PNG + ZIP containing state script
+        // The ZIP is appended after the PNG IEND chunk
+        const zip = new JSZip()
+        zip.file('state.spt', stateScript)
+
+        const zipData = await zip.generateAsync({ type: 'uint8array' })
+        console.log('ZIP state data size:', zipData.length, 'bytes')
+
+        // Combine PNG + ZIP to create PNGJ
+        const pngjBytes = new Uint8Array(pngBytes.length + zipData.length)
+        pngjBytes.set(pngBytes, 0)
+        pngjBytes.set(zipData, pngBytes.length)
+
+        finalBlob = new Blob([pngjBytes], { type: 'image/png' })
+        console.log('Created PNGJ, total size:', finalBlob.size, 'bytes')
+      } else {
+        // No state available, just use the PNG
+        console.warn('No state script available, saving as plain PNG')
+        finalBlob = new Blob([pngBytes], { type: 'image/png' })
       }
-      const blob = new Blob([byteNumbers], { type: 'image/png' })
-
-      // Verify it looks like a PNGJ (should be larger than a plain PNG due to embedded state)
-      console.log('PNGJ blob size:', blob.size, 'bytes')
 
       // Create form data
       const formData = new FormData()
       const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')
       // Use .png extension - PNGJ files are valid PNGs with embedded state data
       const filename = `${modelName.replace(/\s+/g, '_')}_${timestamp}.png`
-      formData.append('file', blob, filename)
+      formData.append('file', finalBlob, filename)
 
       // Upload to replace endpoint
       const token = localStorage.getItem('token')
