@@ -293,6 +293,17 @@ build_frontend() {
     echo "Frontend built!"
 }
 
+# Build server (must happen before cleanup removes dev dependencies)
+build_server() {
+    echo ""
+    echo "Building server..."
+
+    cd "$INSTANCE_DIR/server"
+    npm run build
+
+    echo "Server built!"
+}
+
 # Cleanup after build
 cleanup() {
     echo ""
@@ -332,9 +343,6 @@ start_app() {
 
     cd "$INSTANCE_DIR/server"
 
-    # Build TypeScript
-    npm run build
-
     # Stop existing instance if running
     pm2 delete protein-modeling 2>/dev/null || true
 
@@ -356,6 +364,7 @@ main() {
     run_migrations
     create_admin
     build_frontend
+    build_server
     cleanup
     start_app
 
