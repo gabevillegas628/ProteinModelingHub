@@ -225,10 +225,11 @@ router.post('/models/:templateId/upload', modelUpload.single('file'), async (req
   }
 });
 
-// Get model file
+// Get model file (accepts optional .png extension for JSmol compatibility)
 router.get('/models/file/:submissionId', async (req: AuthRequest, res: Response) => {
   try {
-    const submissionId = req.params.submissionId as string;
+    // Strip .png extension if present (added for JSmol file type detection)
+    const submissionId = (req.params.submissionId as string).replace(/\.png$/, '');
 
     const group = await getStudentGroup(req.user!.userId);
     if (!group) {

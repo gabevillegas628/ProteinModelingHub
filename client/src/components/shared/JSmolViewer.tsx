@@ -118,9 +118,8 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
                 set platformSpeed 3;
               `
 
-              // Just use JSmol's native load command - it handles PNGJ files directly
-              // PNGJ files contain the state script which includes load commands and styling
-              console.log('Loading file with JSmol:', fileUrl)
+              // Load the PNGJ file - URL now has .png extension for JSmol file type detection
+              console.log('Loading PNGJ file with JSmol:', fileUrl)
               window.Jmol.script(appletRef.current!, `
                 ${baseSettings}
                 load "${fileUrl}";
