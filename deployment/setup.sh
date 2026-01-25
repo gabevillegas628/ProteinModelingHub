@@ -287,9 +287,8 @@ build_frontend() {
     cd "$INSTANCE_DIR/client"
     npm run build
 
-    # Copy build to server's public folder
-    rm -rf "$INSTANCE_DIR/server/public"
-    cp -r "$INSTANCE_DIR/client/dist" "$INSTANCE_DIR/server/public"
+    # Note: Vite is configured to output directly to ../server/public
+    # so no copy step is needed
 
     echo "Frontend built!"
 }
