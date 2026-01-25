@@ -200,6 +200,7 @@ router.post('/models/:templateId/upload', modelUpload.single('file'), async (req
           filePath: file.filename,
           fileSize: file.size,
           status: 'SUBMITTED',
+          createdAt: new Date(),
           updatedAt: new Date()
         }
       });
@@ -301,6 +302,7 @@ router.put('/models/:submissionId/replace', modelUpload.single('file'), async (r
         fileName: file.originalname,
         filePath: file.filename,
         fileSize: file.size,
+        createdAt: new Date(),
         updatedAt: new Date()
       }
     });
