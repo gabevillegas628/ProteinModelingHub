@@ -62,10 +62,13 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   const [command, setCommand] = useState('')
   const [commandHistory, setCommandHistory] = useState<string[]>([])
   const [historyIndex, setHistoryIndex] = useState(-1)
-  const [commandOutput, setCommandOutput] = useState<string>('')
+  const [consoleLog, setConsoleLog] = useState<Array<{ type: 'command' | 'output' | 'error', text: string }>>([])
 
   useEffect(() => {
     if (!isOpen || !containerRef.current) return
+
+    // Clear console log when viewer opens
+    setConsoleLog([])
 
     const initJSmol = async () => {
       if (!window.Jmol) {
@@ -162,6 +165,13 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     }
   }, [isOpen])
 
+  // Auto-scroll console to bottom when new entries are added
+  useEffect(() => {
+    if (consoleRef.current) {
+      consoleRef.current.scrollTop = consoleRef.current.scrollHeight
+    }
+  }, [consoleLog])
+
   const runScript = (script: string) => {
     if (appletRef.current && window.Jmol) {
       window.Jmol.script(appletRef.current, script)
@@ -245,6 +255,9 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     setCommand('')
     setHistoryIndex(-1)
 
+    // Add command to console log
+    setConsoleLog(prev => [...prev, { type: 'command', text: cmd }])
+
     if (appletRef.current && window.Jmol) {
       // Run the command
       window.Jmol.script(appletRef.current, cmd)
@@ -254,23 +267,25 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
         if (appletRef.current && window.Jmol) {
           // Try multiple approaches to get output
           let output = ''
+          let isError = false
 
-          // Check for selection count (most common feedback)
+          // Check for script error message first
           try {
-            const selectedCount = window.Jmol.evaluateVar(appletRef.current, '{selected}.count')
-            if (typeof selectedCount === 'number') {
-              output = `${selectedCount} atom${selectedCount !== 1 ? 's' : ''} selected`
+            const errorMsg = window.Jmol.evaluateVar(appletRef.current, '_errorMessage')
+            if (errorMsg && typeof errorMsg === 'string' && errorMsg.length > 0) {
+              output = errorMsg
+              isError = true
             }
           } catch {
             // Ignore errors
           }
 
-          // Check for script error message
+          // Check for selection count (most common feedback)
           if (!output) {
             try {
-              const errorMsg = window.Jmol.evaluateVar(appletRef.current, '_errorMessage')
-              if (errorMsg && typeof errorMsg === 'string' && errorMsg.length > 0) {
-                output = `Error: ${errorMsg}`
+              const selectedCount = window.Jmol.evaluateVar(appletRef.current, '{selected}.count')
+              if (typeof selectedCount === 'number') {
+                output = `${selectedCount} atom${selectedCount !== 1 ? 's' : ''} selected`
               }
             } catch {
               // Ignore errors
@@ -289,7 +304,10 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
             }
           }
 
-          setCommandOutput(output || `> ${cmd}`)
+          // Add output to console log if we got something
+          if (output) {
+            setConsoleLog(prev => [...prev, { type: isError ? 'error' : 'output', text: output }])
+          }
         }
       }, 200)
     }
@@ -333,7 +351,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+    <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full mx-4 overflow-hidden max-h-[95vh] flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b bg-gray-50 shrink-0">
@@ -540,12 +558,22 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
         {/* Script Console Footer */}
         <div className="border-t bg-gray-900 shrink-0">
-          {commandOutput && (
+          {consoleLog.length > 0 && (
             <div
               ref={consoleRef}
-              className="px-4 py-2 text-green-400 font-mono bg-gray-800 border-b border-gray-700 max-h-24 overflow-y-auto"
+              className="px-4 py-2 font-mono text-sm bg-gray-800 border-b border-gray-700 max-h-32 overflow-y-auto"
             >
-              {commandOutput}
+              {consoleLog.map((entry, index) => (
+                <div key={index} className={`${
+                  entry.type === 'command'
+                    ? 'text-white'
+                    : entry.type === 'error'
+                      ? 'text-red-400'
+                      : 'text-green-400'
+                }`}>
+                  {entry.type === 'command' ? `> ${entry.text}` : `  ${entry.text}`}
+                </div>
+              ))}
             </div>
           )}
           <form onSubmit={handleCommandSubmit} className="flex items-center gap-3 px-4 py-3">
@@ -558,7 +586,18 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
               placeholder="Enter Jmol command (e.g., select helix; color red)"
               className="flex-1 bg-transparent text-white font-mono text-base focus:outline-none placeholder-gray-500"
             />
-            <span className="text-sm text-gray-500">↑↓ history</span>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-gray-500">↑↓ history</span>
+              {consoleLog.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setConsoleLog([])}
+                  className="text-xs text-gray-500 hover:text-gray-300"
+                >
+                  clear
+                </button>
+              )}
+            </div>
           </form>
         </div>
       </div>
