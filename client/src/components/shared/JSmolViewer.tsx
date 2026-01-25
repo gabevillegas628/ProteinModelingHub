@@ -593,65 +593,55 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
     setIsReplacing(true)
     try {
-      // Try multiple approaches to get PNGJ data
-      let pngjData: string | number[] | null = null
+      // In JSmol HTML5 mode, use write("base64:PNGJ") to get PNGJ data as base64
+      // PNGJ format = PNG image + embedded ZIP with state script
+      let pngjBase64: string | null = null
 
-      // Approach 1: Use getPropertyAsArray for binary data
+      // Primary approach: Use evaluateVar with base64:PNGJ format
+      // This tells JSmol to return the PNGJ data as a base64-encoded string
       try {
-        const byteArray = window.Jmol.getPropertyAsArray(appletRef.current, 'image', 'PNGJ')
-        if (byteArray && byteArray.length > 0) {
-          pngjData = byteArray
+        const result = window.Jmol.evaluateVar(appletRef.current, 'write("base64:PNGJ")')
+        if (result && typeof result === 'string' && result.length > 0) {
+          pngjBase64 = result
+          console.log('Got PNGJ data via base64:PNGJ, length:', result.length)
         }
       } catch (e) {
-        console.log('getPropertyAsArray failed:', e)
+        console.log('base64:PNGJ approach failed:', e)
       }
 
-      // Approach 2: Use getPropertyAsString for base64 data
-      if (!pngjData) {
+      // Fallback: Try without base64 prefix (some versions return base64 anyway)
+      if (!pngjBase64) {
         try {
-          const base64Data = window.Jmol.getPropertyAsString(appletRef.current, 'image', 'PNGJ')
-          if (base64Data && base64Data.length > 0) {
-            pngjData = base64Data
+          const result = window.Jmol.evaluateVar(appletRef.current, 'write("PNGJ")')
+          if (result && typeof result === 'string' && result.length > 0) {
+            pngjBase64 = result
+            console.log('Got PNGJ data via write("PNGJ"), length:', result.length)
           }
         } catch (e) {
-          console.log('getPropertyAsString failed:', e)
+          console.log('write("PNGJ") approach failed:', e)
         }
       }
 
-      // Approach 3: Use evaluateVar with write command
-      if (!pngjData) {
-        try {
-          const evalResult = window.Jmol.evaluateVar(appletRef.current, 'write("PNGJ")')
-          if (evalResult) {
-            pngjData = evalResult as string
-          }
-        } catch (e) {
-          console.log('evaluateVar failed:', e)
-        }
+      if (!pngjBase64) {
+        throw new Error('Failed to capture PNGJ data from viewer. The viewer may not support this export format.')
       }
 
-      if (!pngjData) {
-        throw new Error('Failed to capture PNGJ data from viewer')
+      // Convert base64 to blob
+      // Handle potential "data:image/png;base64," prefix
+      let base64Data = pngjBase64
+      if (base64Data.startsWith('data:')) {
+        base64Data = base64Data.split(',')[1]
       }
 
-      // Convert to blob based on data type
-      let blob: Blob
-      if (Array.isArray(pngjData)) {
-        // It's a byte array
-        const uint8Array = new Uint8Array(pngjData)
-        blob = new Blob([uint8Array], { type: 'image/png' })
-      } else if (typeof pngjData === 'string') {
-        // It's base64 encoded
-        const byteCharacters = atob(pngjData)
-        const byteNumbers = new Array(byteCharacters.length)
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i)
-        }
-        const byteArray = new Uint8Array(byteNumbers)
-        blob = new Blob([byteArray], { type: 'image/png' })
-      } else {
-        throw new Error('Unexpected PNGJ data format')
+      const byteCharacters = atob(base64Data)
+      const byteNumbers = new Uint8Array(byteCharacters.length)
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i)
       }
+      const blob = new Blob([byteNumbers], { type: 'image/png' })
+
+      // Verify it looks like a PNGJ (should be larger than a plain PNG due to embedded state)
+      console.log('PNGJ blob size:', blob.size, 'bytes')
 
       // Create form data
       const formData = new FormData()
