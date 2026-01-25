@@ -656,7 +656,8 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
       // Create form data
       const formData = new FormData()
       const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')
-      const filename = `${modelName.replace(/\s+/g, '_')}_${timestamp}.pngj`
+      // Use .png extension - PNGJ files are valid PNGs with embedded state data
+      const filename = `${modelName.replace(/\s+/g, '_')}_${timestamp}.png`
       formData.append('file', blob, filename)
 
       // Upload to replace endpoint
