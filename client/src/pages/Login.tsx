@@ -95,7 +95,7 @@ export default function Login() {
             {/* Blue Header */}
             <div className="bg-blue-800 px-6 py-5">
               <h1 className="text-2xl font-bold text-white text-center">
-                Protein Model Organizer
+                WSSP Protein Modeling
               </h1>
               <p className="text-blue-200 text-center text-sm mt-1">Sign in to your account</p>
             </div>

@@ -10,6 +10,8 @@ declare global {
       getAppletHtml: (applet: JmolApplet) => string;
       setDocument: (doc: boolean) => void;
       evaluateVar: (applet: JmolApplet, variable: string) => unknown;
+      getPropertyAsString: (applet: JmolApplet, property: string, params?: string) => string;
+      getPropertyAsArray: (applet: JmolApplet, property: string, params?: string) => number[];
     };
   }
 }
@@ -503,26 +505,6 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     runScript(direction === 'in' ? 'zoom *1.2' : 'zoom /1.2')
   }
 
-  const handleSaveImage = () => {
-    if (appletRef.current && window.Jmol) {
-      // Generate timestamp for filename
-      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')
-      const filename = `${modelName.replace(/\s+/g, '_')}_${timestamp}.png`
-
-      // Use JSmol's write command to create and download image
-      runScript(`write IMAGE PNG "${filename}"`)
-    }
-  }
-
-  const handleSaveState = () => {
-    if (appletRef.current && window.Jmol) {
-      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')
-      const filename = `${modelName.replace(/\s+/g, '_')}_${timestamp}.jpg`
-
-      // PNGJ saves the image with embedded Jmol state
-      runScript(`write PNGJ "${filename}"`)
-    }
-  }
 
   // Command console handlers
   const handleCommandSubmit = (e: React.FormEvent) => {
@@ -611,21 +593,65 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
     setIsReplacing(true)
     try {
-      // Get the PNGJ data as base64
-      const pngjData = window.Jmol.evaluateVar(appletRef.current, 'write("PNGJ")') as string
+      // Try multiple approaches to get PNGJ data
+      let pngjData: string | number[] | null = null
+
+      // Approach 1: Use getPropertyAsArray for binary data
+      try {
+        const byteArray = window.Jmol.getPropertyAsArray(appletRef.current, 'image', 'PNGJ')
+        if (byteArray && byteArray.length > 0) {
+          pngjData = byteArray
+        }
+      } catch (e) {
+        console.log('getPropertyAsArray failed:', e)
+      }
+
+      // Approach 2: Use getPropertyAsString for base64 data
+      if (!pngjData) {
+        try {
+          const base64Data = window.Jmol.getPropertyAsString(appletRef.current, 'image', 'PNGJ')
+          if (base64Data && base64Data.length > 0) {
+            pngjData = base64Data
+          }
+        } catch (e) {
+          console.log('getPropertyAsString failed:', e)
+        }
+      }
+
+      // Approach 3: Use evaluateVar with write command
+      if (!pngjData) {
+        try {
+          const evalResult = window.Jmol.evaluateVar(appletRef.current, 'write("PNGJ")')
+          if (evalResult) {
+            pngjData = evalResult as string
+          }
+        } catch (e) {
+          console.log('evaluateVar failed:', e)
+        }
+      }
 
       if (!pngjData) {
-        throw new Error('Failed to capture PNGJ data')
+        throw new Error('Failed to capture PNGJ data from viewer')
       }
 
-      // Convert base64 to blob
-      const byteCharacters = atob(pngjData)
-      const byteNumbers = new Array(byteCharacters.length)
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i)
+      // Convert to blob based on data type
+      let blob: Blob
+      if (Array.isArray(pngjData)) {
+        // It's a byte array
+        const uint8Array = new Uint8Array(pngjData)
+        blob = new Blob([uint8Array], { type: 'image/png' })
+      } else if (typeof pngjData === 'string') {
+        // It's base64 encoded
+        const byteCharacters = atob(pngjData)
+        const byteNumbers = new Array(byteCharacters.length)
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i)
+        }
+        const byteArray = new Uint8Array(byteNumbers)
+        blob = new Blob([byteArray], { type: 'image/png' })
+      } else {
+        throw new Error('Unexpected PNGJ data format')
       }
-      const byteArray = new Uint8Array(byteNumbers)
-      const blob = new Blob([byteArray], { type: 'image/png' })
 
       // Create form data
       const formData = new FormData()
@@ -833,45 +859,25 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
                   </div>
                 </div>
 
-                {/* Save Options */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Save</label>
-                  <div className="space-y-2">
+                {/* Replace Submission */}
+                {submissionId && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Update Submission</label>
                     <button
-                      onClick={handleSaveImage}
-                      className="w-full px-3 py-2 bg-green-600 text-white rounded text-sm font-medium hover:bg-green-700 flex items-center justify-center gap-2"
+                      onClick={handleReplaceSubmission}
+                      disabled={isReplacing}
+                      className="w-full px-3 py-2 bg-orange-600 text-white rounded text-sm font-medium hover:bg-orange-700 disabled:bg-orange-400 flex items-center justify-center gap-2"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                       </svg>
-                      Save as PNG
+                      {isReplacing ? 'Replacing...' : 'Replace Submission'}
                     </button>
-                    <button
-                      onClick={handleSaveState}
-                      className="w-full px-3 py-2 bg-purple-600 text-white rounded text-sm font-medium hover:bg-purple-700 flex items-center justify-center gap-2"
-                    >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
-                      </svg>
-                      Save with 3D State
-                    </button>
-                    {submissionId && (
-                      <button
-                        onClick={handleReplaceSubmission}
-                        disabled={isReplacing}
-                        className="w-full px-3 py-2 bg-orange-600 text-white rounded text-sm font-medium hover:bg-orange-700 disabled:bg-orange-400 flex items-center justify-center gap-2"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        {isReplacing ? 'Replacing...' : 'Replace Submission'}
-                      </button>
-                    )}
-                    <p className="text-xs text-gray-500">
-                      "Save with 3D State" creates a file that can be reopened in JSmol with all settings preserved.
+                    <p className="text-xs text-gray-500 mt-1">
+                      Save current view as a PNGJ file and replace your submission.
                     </p>
                   </div>
-                </div>
+                )}
 
                 {/* Load from PDB */}
                 {proteinPdbId && (

@@ -180,28 +180,43 @@ router.post('/models/:templateId/upload', modelUpload.single('file'), async (req
       orderBy: { createdAt: 'desc' }
     });
 
-    // Delete old file if exists
-    if (existingSubmission && existingSubmission.filePath) {
-      const oldPath = path.join(MODELS_DIR, existingSubmission.filePath);
-      if (fs.existsSync(oldPath)) {
-        fs.unlinkSync(oldPath);
-      }
-      // Delete old submission record
-      await prisma.submission.delete({ where: { id: existingSubmission.id } });
-    }
+    let submission;
 
-    // Create new submission
-    const submission = await prisma.submission.create({
-      data: {
-        groupId: group.id,
-        modelTemplateId: templateId,
-        submittedById: req.user!.userId,
-        fileName: file.originalname,
-        filePath: file.filename,
-        fileSize: file.size,
-        status: 'SUBMITTED'
+    if (existingSubmission) {
+      // Delete old file if exists
+      if (existingSubmission.filePath) {
+        const oldPath = path.join(MODELS_DIR, existingSubmission.filePath);
+        if (fs.existsSync(oldPath)) {
+          fs.unlinkSync(oldPath);
+        }
       }
-    });
+
+      // Update existing submission (preserves messages/comments)
+      submission = await prisma.submission.update({
+        where: { id: existingSubmission.id },
+        data: {
+          submittedById: req.user!.userId,
+          fileName: file.originalname,
+          filePath: file.filename,
+          fileSize: file.size,
+          status: 'SUBMITTED',
+          updatedAt: new Date()
+        }
+      });
+    } else {
+      // Create new submission
+      submission = await prisma.submission.create({
+        data: {
+          groupId: group.id,
+          modelTemplateId: templateId,
+          submittedById: req.user!.userId,
+          fileName: file.originalname,
+          filePath: file.filename,
+          fileSize: file.size,
+          status: 'SUBMITTED'
+        }
+      });
+    }
 
     res.status(201).json(submission);
   } catch (error) {
