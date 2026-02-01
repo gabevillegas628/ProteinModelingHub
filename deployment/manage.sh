@@ -129,9 +129,7 @@ rebuild_app() {
     cd "$INSTANCE_DIR/client"
     npm run build
 
-    # Copy build
-    rm -rf "$INSTANCE_DIR/server/public"
-    cp -r "$INSTANCE_DIR/client/dist" "$INSTANCE_DIR/server/public"
+    # Note: Vite outputs directly to ../server/public, no copy needed
 
     # Cleanup
     rm -rf "$INSTANCE_DIR/client/node_modules"
