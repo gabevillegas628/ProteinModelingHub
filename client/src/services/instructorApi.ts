@@ -1,4 +1,4 @@
-const API_BASE = '/api/instructor';
+const API_BASE = '/modeling/api/instructor';
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('token');

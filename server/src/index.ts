@@ -21,11 +21,11 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// API Routes
-app.use('/api', routes);
+// API Routes - mounted at /modeling/api for subdirectory deployment
+app.use('/modeling/api', routes);
 
 // Health check
-app.get('/health', (req, res) => {
+app.get('/modeling/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
@@ -33,12 +33,17 @@ app.get('/health', (req, res) => {
 if (isProduction) {
   const publicPath = path.join(__dirname, '..', 'public');
 
-  // Serve static assets
-  app.use(express.static(publicPath));
+  // Serve static assets under /modeling path
+  app.use('/modeling', express.static(publicPath));
 
-  // Handle SPA routing - serve index.html for all non-API routes
-  app.get('*', (req, res) => {
+  // Handle SPA routing - serve index.html for all /modeling routes that aren't API
+  app.get('/modeling/*', (req, res) => {
     res.sendFile(path.join(publicPath, 'index.html'));
+  });
+
+  // Redirect root /modeling to /modeling/ for consistency
+  app.get('/modeling', (req, res) => {
+    res.redirect('/modeling/');
   });
 }
 

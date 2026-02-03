@@ -1,4 +1,4 @@
-const API_BASE = '/api/messages';
+const API_BASE = '/modeling/api/messages';
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const token = localStorage.getItem('token');
