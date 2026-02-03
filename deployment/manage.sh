@@ -103,7 +103,6 @@ rebuild_app() {
     cp "$PROJECT_DIR/client/package.json" "$INSTANCE_DIR/client/package.json"
     cp "$PROJECT_DIR/client/index.html" "$INSTANCE_DIR/client/index.html"
     cp "$PROJECT_DIR/client/vite.config.ts" "$INSTANCE_DIR/client/vite.config.ts"
-    cp "$PROJECT_DIR/client/tailwind.config.js" "$INSTANCE_DIR/client/tailwind.config.js"
     cp "$PROJECT_DIR/client/postcss.config.js" "$INSTANCE_DIR/client/postcss.config.js"
     cp "$PROJECT_DIR/client/tsconfig.json" "$INSTANCE_DIR/client/tsconfig.json"
 

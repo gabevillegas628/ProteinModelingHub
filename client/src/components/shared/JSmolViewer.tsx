@@ -91,7 +91,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
           height: '100%',
           color: '0x111827',  // Match Tailwind's gray-900
           use: 'HTML5',
-          j2sPath: '/jsmol/j2s',  // Local path
+          j2sPath: '/modeling/jsmol/j2s',  // Local path (includes subdirectory prefix)
           disableJ2SLoadMonitor: true,
           disableInitialConsole: true,
           allowJavaScript: true,
