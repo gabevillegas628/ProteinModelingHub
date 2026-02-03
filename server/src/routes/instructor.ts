@@ -135,10 +135,11 @@ router.get('/groups/:groupId/submissions', async (req: AuthRequest, res: Respons
   }
 });
 
-// Get submission file
+// Get submission file (accepts optional .png extension for JSmol compatibility)
 router.get('/submissions/file/:submissionId', async (req: AuthRequest, res: Response) => {
   try {
-    const submissionId = req.params.submissionId as string;
+    // Strip .png extension if present (added for JSmol file type detection)
+    const submissionId = (req.params.submissionId as string).replace(/\.png$/, '');
 
     const submission = await prisma.submission.findUnique({
       where: { id: submissionId }
