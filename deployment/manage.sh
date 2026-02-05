@@ -117,9 +117,9 @@ rebuild_app() {
     # Run migrations
     echo "Running migrations..."
     cd "$INSTANCE_DIR/server"
-    # Clear Prisma cache to ensure fresh generation from updated schema
+    # Clear Prisma generated client cache to ensure fresh generation from updated schema
+    # Note: Only remove .prisma (generated), NOT @prisma/client (npm package needed for re-export)
     rm -rf node_modules/.prisma
-    rm -rf node_modules/@prisma/client
     npx prisma generate
     npx prisma db push
 
