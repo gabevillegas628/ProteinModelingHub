@@ -68,10 +68,84 @@ router.get('/group/:groupId', async (req: AuthRequest, res: Response) => {
       }
     });
 
-    res.json(messages);
+    // Get read status for current user
+    const readStatus = await prisma.messageReadStatus.findFirst({
+      where: { userId, groupId, submissionId: null }
+    });
+
+    // Calculate unread count
+    const unreadCount = readStatus
+      ? messages.filter(m => new Date(m.createdAt) > readStatus.lastReadAt).length
+      : messages.length;
+
+    // Get all read statuses for this group chat (for "seen by" indicators)
+    const allReadStatuses = await prisma.messageReadStatus.findMany({
+      where: {
+        groupId,
+        submissionId: null
+      },
+      include: {
+        user: {
+          select: { id: true, firstName: true, lastName: true, role: true }
+        }
+      }
+    });
+
+    // Transform to a simpler format
+    const readStatuses = allReadStatuses.map(rs => ({
+      userId: rs.userId,
+      lastReadAt: rs.lastReadAt.toISOString(),
+      user: rs.user
+    }));
+
+    res.json({ messages, unreadCount, readStatuses });
   } catch (error) {
     console.error('Error fetching group messages:', error);
     res.status(500).json({ error: 'Failed to fetch messages' });
+  }
+});
+
+// Mark group chat messages as read
+router.put('/group/:groupId/read', async (req: AuthRequest, res: Response) => {
+  try {
+    const groupId = req.params.groupId as string;
+    const userId = req.user!.userId;
+    const userRole = req.user!.role;
+    const { lastReadAt } = req.body;
+
+    if (!lastReadAt) {
+      res.status(400).json({ error: 'lastReadAt timestamp is required' });
+      return;
+    }
+
+    // Check access
+    const canAccess = await hasGroupAccess(userId, userRole, groupId);
+    if (!canAccess) {
+      res.status(403).json({ error: 'You do not have access to this group' });
+      return;
+    }
+
+    // Upsert read status
+    const existingStatus = await prisma.messageReadStatus.findFirst({
+      where: { userId, groupId, submissionId: null }
+    });
+
+    let readStatus;
+    if (existingStatus) {
+      readStatus = await prisma.messageReadStatus.update({
+        where: { id: existingStatus.id },
+        data: { lastReadAt: new Date(lastReadAt) }
+      });
+    } else {
+      readStatus = await prisma.messageReadStatus.create({
+        data: { userId, groupId, submissionId: null, lastReadAt: new Date(lastReadAt) }
+      });
+    }
+
+    res.json(readStatus);
+  } catch (error) {
+    console.error('Error marking group messages as read:', error);
+    res.status(500).json({ error: 'Failed to mark messages as read' });
   }
 });
 
@@ -117,6 +191,21 @@ router.post('/group/:groupId', async (req: AuthRequest, res: Response) => {
       }
     });
 
+    // Auto-mark as read for the sender (they've seen up to their own message)
+    const existingReadStatus = await prisma.messageReadStatus.findFirst({
+      where: { userId, groupId, submissionId: null }
+    });
+    if (existingReadStatus) {
+      await prisma.messageReadStatus.update({
+        where: { id: existingReadStatus.id },
+        data: { lastReadAt: message.createdAt }
+      });
+    } else {
+      await prisma.messageReadStatus.create({
+        data: { userId, groupId, submissionId: null, lastReadAt: message.createdAt }
+      });
+    }
+
     res.status(201).json(message);
   } catch (error) {
     console.error('Error posting group message:', error);
@@ -159,10 +248,97 @@ router.get('/submission/:submissionId', async (req: AuthRequest, res: Response) 
       }
     });
 
-    res.json(comments);
+    // Get read status for current user
+    const readStatus = await prisma.messageReadStatus.findUnique({
+      where: {
+        userId_groupId_submissionId: {
+          userId,
+          groupId: submission.groupId,
+          submissionId
+        }
+      }
+    });
+
+    // Calculate unread count
+    const unreadCount = readStatus
+      ? comments.filter(m => new Date(m.createdAt) > readStatus.lastReadAt).length
+      : comments.length;
+
+    // Get all read statuses for this submission (for "seen by" indicators)
+    const allReadStatuses = await prisma.messageReadStatus.findMany({
+      where: {
+        groupId: submission.groupId,
+        submissionId
+      },
+      include: {
+        user: {
+          select: { id: true, firstName: true, lastName: true, role: true }
+        }
+      }
+    });
+
+    // Transform to a simpler format
+    const readStatuses = allReadStatuses.map(rs => ({
+      userId: rs.userId,
+      lastReadAt: rs.lastReadAt.toISOString(),
+      user: rs.user
+    }));
+
+    res.json({ messages: comments, unreadCount, readStatuses });
   } catch (error) {
     console.error('Error fetching submission comments:', error);
     res.status(500).json({ error: 'Failed to fetch comments' });
+  }
+});
+
+// Mark submission comments as read
+router.put('/submission/:submissionId/read', async (req: AuthRequest, res: Response) => {
+  try {
+    const submissionId = req.params.submissionId as string;
+    const userId = req.user!.userId;
+    const userRole = req.user!.role;
+    const { lastReadAt } = req.body;
+
+    if (!lastReadAt) {
+      res.status(400).json({ error: 'lastReadAt timestamp is required' });
+      return;
+    }
+
+    // Check access
+    const { hasAccess, submission } = await hasSubmissionAccess(userId, userRole, submissionId);
+    if (!submission) {
+      res.status(404).json({ error: 'Submission not found' });
+      return;
+    }
+    if (!hasAccess) {
+      res.status(403).json({ error: 'You do not have access to this submission' });
+      return;
+    }
+
+    // Upsert read status
+    const readStatus = await prisma.messageReadStatus.upsert({
+      where: {
+        userId_groupId_submissionId: {
+          userId,
+          groupId: submission.groupId,
+          submissionId
+        }
+      },
+      update: {
+        lastReadAt: new Date(lastReadAt)
+      },
+      create: {
+        userId,
+        groupId: submission.groupId,
+        submissionId,
+        lastReadAt: new Date(lastReadAt)
+      }
+    });
+
+    res.json(readStatus);
+  } catch (error) {
+    console.error('Error marking submission comments as read:', error);
+    res.status(500).json({ error: 'Failed to mark comments as read' });
   }
 });
 
@@ -204,6 +380,21 @@ router.post('/submission/:submissionId', async (req: AuthRequest, res: Response)
         }
       }
     });
+
+    // Auto-mark as read for the sender (they've seen up to their own comment)
+    const existingReadStatus = await prisma.messageReadStatus.findFirst({
+      where: { userId, groupId: submission.groupId, submissionId }
+    });
+    if (existingReadStatus) {
+      await prisma.messageReadStatus.update({
+        where: { id: existingReadStatus.id },
+        data: { lastReadAt: comment.createdAt }
+      });
+    } else {
+      await prisma.messageReadStatus.create({
+        data: { userId, groupId: submission.groupId, submissionId, lastReadAt: comment.createdAt }
+      });
+    }
 
     res.status(201).json(comment);
   } catch (error) {

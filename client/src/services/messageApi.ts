@@ -46,11 +46,23 @@ export interface Message {
   user: MessageUser;
 }
 
+export interface ReadStatus {
+  userId: string;
+  lastReadAt: string;
+  user: MessageUser;
+}
+
+export interface MessagesResponse {
+  messages: Message[];
+  unreadCount: number;
+  readStatuses: ReadStatus[];
+}
+
 // ============================================
 // Group Chat
 // ============================================
 
-export function getGroupMessages(groupId: string): Promise<Message[]> {
+export function getGroupMessages(groupId: string): Promise<MessagesResponse> {
   return request(`/group/${groupId}`);
 }
 
@@ -61,11 +73,18 @@ export function postGroupMessage(groupId: string, content: string): Promise<Mess
   });
 }
 
+export function markGroupRead(groupId: string, lastReadAt: string): Promise<void> {
+  return request(`/group/${groupId}/read`, {
+    method: 'PUT',
+    body: JSON.stringify({ lastReadAt })
+  });
+}
+
 // ============================================
 // Submission Comments
 // ============================================
 
-export function getSubmissionComments(submissionId: string): Promise<Message[]> {
+export function getSubmissionComments(submissionId: string): Promise<MessagesResponse> {
   return request(`/submission/${submissionId}`);
 }
 
@@ -73,5 +92,12 @@ export function postSubmissionComment(submissionId: string, content: string): Pr
   return request(`/submission/${submissionId}`, {
     method: 'POST',
     body: JSON.stringify({ content })
+  });
+}
+
+export function markSubmissionRead(submissionId: string, lastReadAt: string): Promise<void> {
+  return request(`/submission/${submissionId}/read`, {
+    method: 'PUT',
+    body: JSON.stringify({ lastReadAt })
   });
 }

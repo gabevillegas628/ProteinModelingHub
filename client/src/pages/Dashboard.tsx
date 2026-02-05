@@ -71,7 +71,7 @@ export default function Dashboard() {
   return (
     <div className="min-h-screen bg-gray-100 flex flex-col">
       {/* Header */}
-      <header className="bg-white shadow flex-shrink-0">
+      <header className="bg-white shadow shrink-0">
         <div className="max-w-full mx-auto px-4 py-4 flex justify-between items-center">
           <h1 className="text-xl font-bold text-gray-800">Protein Model Organizer</h1>
           <div className="flex items-center gap-4">
@@ -92,7 +92,7 @@ export default function Dashboard() {
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <aside className="w-64 bg-white shadow-lg flex-shrink-0 flex flex-col">
+        <aside className="w-64 bg-white shadow-lg shrink-0 flex flex-col">
           <div className="p-4 border-b">
             <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
               Your Groups
@@ -153,7 +153,7 @@ export default function Dashboard() {
               </div>
 
               {/* Tab Navigation */}
-              <div className="bg-white border-b flex-shrink-0">
+              <div className="bg-white border-b shrink-0">
                 <nav className="flex px-6">
                   {tabs.map((tab) => (
                     <button

@@ -8,6 +8,7 @@ export default function ChatTab() {
   const { user } = useAuth()
   const [group, setGroup] = useState<studentApi.Group | null>(null)
   const [messages, setMessages] = useState<messageApi.Message[]>([])
+  const [readStatuses, setReadStatuses] = useState<messageApi.ReadStatus[]>([])
   const [loading, setLoading] = useState(true)
   const [messagesLoading, setMessagesLoading] = useState(false)
   const [error, setError] = useState('')
@@ -41,8 +42,9 @@ export default function ChatTab() {
     if (!group) return
     try {
       setMessagesLoading(messages.length === 0)
-      const data = await messageApi.getGroupMessages(group.id)
-      setMessages(data)
+      const response = await messageApi.getGroupMessages(group.id)
+      setMessages(response.messages)
+      setReadStatuses(response.readStatuses)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load messages')
     } finally {
@@ -54,6 +56,15 @@ export default function ChatTab() {
     if (!group) return
     await messageApi.postGroupMessage(group.id, content)
     await loadMessages()
+  }
+
+  const markAsRead = async (lastReadAt: string) => {
+    if (!group) return
+    try {
+      await messageApi.markGroupRead(group.id, lastReadAt)
+    } catch (err) {
+      console.error('Failed to mark messages as read:', err)
+    }
   }
 
   if (loading) {
@@ -93,6 +104,8 @@ export default function ChatTab() {
           placeholder="Type a message..."
           emptyMessage="No messages yet. Start the conversation with your group!"
           currentUserId={user?.id}
+          onMarkRead={markAsRead}
+          readStatuses={readStatuses}
         />
       </div>
     </div>

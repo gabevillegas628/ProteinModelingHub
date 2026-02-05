@@ -94,6 +94,7 @@ router.get('/groups/:groupId', async (req: AuthRequest, res: Response) => {
 router.get('/groups/:groupId/submissions', async (req: AuthRequest, res: Response) => {
   try {
     const groupId = req.params.groupId as string;
+    const userId = req.user!.userId;
 
     // Verify group exists
     const group = await prisma.group.findUnique({ where: { id: groupId } });
@@ -119,14 +120,37 @@ router.get('/groups/:groupId/submissions', async (req: AuthRequest, res: Respons
       }
     });
 
-    // Map templates with their submissions
-    const modelsWithSubmissions = templates.map(template => {
+    // Get user's read status for all submissions in this group
+    const readStatuses = await prisma.messageReadStatus.findMany({
+      where: {
+        userId,
+        groupId,
+        submissionId: { not: null }
+      }
+    });
+
+    // Map templates with their submissions and unread counts
+    const modelsWithSubmissions = await Promise.all(templates.map(async template => {
       const submission = submissions.find(s => s.modelTemplateId === template.id);
+
+      let unreadCount = 0;
+      if (submission) {
+        const readStatus = readStatuses.find(rs => rs.submissionId === submission.id);
+
+        // Count unread messages for this submission
+        unreadCount = await prisma.message.count({
+          where: {
+            submissionId: submission.id,
+            ...(readStatus ? { createdAt: { gt: readStatus.lastReadAt } } : {})
+          }
+        });
+      }
+
       return {
         ...template,
-        submission: submission || null
+        submission: submission ? { ...submission, unreadCount } : null
       };
-    });
+    }));
 
     res.json(modelsWithSubmissions);
   } catch (error) {

@@ -106,7 +106,8 @@ router.get('/group', async (req: AuthRequest, res: Response) => {
 // Get all active model templates with student's submissions
 router.get('/models', async (req: AuthRequest, res: Response) => {
   try {
-    const group = await getStudentGroup(req.user!.userId);
+    const userId = req.user!.userId;
+    const group = await getStudentGroup(userId);
     if (!group) {
       res.status(404).json({ error: 'You are not assigned to a group' });
       return;
@@ -124,14 +125,37 @@ router.get('/models', async (req: AuthRequest, res: Response) => {
       orderBy: { createdAt: 'desc' }
     });
 
-    // Map templates with their latest submission
-    const modelsWithSubmissions = templates.map(template => {
+    // Get user's read status for all submissions in this group
+    const readStatuses = await prisma.messageReadStatus.findMany({
+      where: {
+        userId,
+        groupId: group.id,
+        submissionId: { not: null }
+      }
+    });
+
+    // Map templates with their latest submission and unread counts
+    const modelsWithSubmissions = await Promise.all(templates.map(async template => {
       const submission = submissions.find(s => s.modelTemplateId === template.id);
+
+      let unreadCount = 0;
+      if (submission) {
+        const readStatus = readStatuses.find(rs => rs.submissionId === submission.id);
+
+        // Count unread messages for this submission
+        unreadCount = await prisma.message.count({
+          where: {
+            submissionId: submission.id,
+            ...(readStatus ? { createdAt: { gt: readStatus.lastReadAt } } : {})
+          }
+        });
+      }
+
       return {
         ...template,
-        submission: submission || null
+        submission: submission ? { ...submission, unreadCount } : null
       };
-    });
+    }));
 
     res.json({
       group,

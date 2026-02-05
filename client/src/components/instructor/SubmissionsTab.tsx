@@ -3,6 +3,7 @@ import * as instructorApi from '../../services/instructorApi'
 import * as messageApi from '../../services/messageApi'
 import JSmolViewer from '../shared/JSmolViewer'
 import CommentThread from '../shared/CommentThread'
+import DiscussionModal from '../shared/DiscussionModal'
 import { useAuth } from '../../context/AuthContext'
 
 interface Props {
@@ -23,6 +24,8 @@ interface CommentsState {
     loading: boolean
     error: string
     expanded: boolean
+    unreadCount: number
+    readStatuses: messageApi.ReadStatus[]
   }
 }
 
@@ -33,6 +36,7 @@ export default function SubmissionsTab({ groupId, proteinPdbId }: Props) {
   const [error, setError] = useState('')
   const [viewer, setViewer] = useState<ViewerState>({ isOpen: false, fileUrl: '', modelName: '' })
   const [comments, setComments] = useState<CommentsState>({})
+  const [discussionModal, setDiscussionModal] = useState<{ submissionId: string; modelName: string } | null>(null)
 
   useEffect(() => {
     loadSubmissions()
@@ -90,7 +94,9 @@ export default function SubmissionsTab({ groupId, proteinPdbId }: Props) {
           messages: prev[submissionId]?.messages || [],
           loading: true,
           error: '',
-          expanded: true
+          expanded: true,
+          unreadCount: prev[submissionId]?.unreadCount || 0,
+          readStatuses: prev[submissionId]?.readStatuses || []
         }
       }))
       await loadComments(submissionId)
@@ -99,14 +105,16 @@ export default function SubmissionsTab({ groupId, proteinPdbId }: Props) {
 
   const loadComments = async (submissionId: string) => {
     try {
-      const messages = await messageApi.getSubmissionComments(submissionId)
+      const response = await messageApi.getSubmissionComments(submissionId)
       setComments(prev => ({
         ...prev,
         [submissionId]: {
-          messages,
+          messages: response.messages,
           loading: false,
           error: '',
-          expanded: true
+          expanded: prev[submissionId]?.expanded ?? true,
+          unreadCount: response.unreadCount,
+          readStatuses: response.readStatuses
         }
       }))
     } catch (err) {
@@ -116,7 +124,9 @@ export default function SubmissionsTab({ groupId, proteinPdbId }: Props) {
           messages: [],
           loading: false,
           error: err instanceof Error ? err.message : 'Failed to load comments',
-          expanded: true
+          expanded: prev[submissionId]?.expanded ?? true,
+          unreadCount: 0,
+          readStatuses: []
         }
       }))
     }
@@ -125,6 +135,40 @@ export default function SubmissionsTab({ groupId, proteinPdbId }: Props) {
   const postComment = async (submissionId: string, content: string) => {
     await messageApi.postSubmissionComment(submissionId, content)
     await loadComments(submissionId)
+  }
+
+  const markCommentsRead = async (submissionId: string, lastReadAt: string) => {
+    try {
+      await messageApi.markSubmissionRead(submissionId, lastReadAt)
+      setComments(prev => ({
+        ...prev,
+        [submissionId]: {
+          ...prev[submissionId],
+          unreadCount: 0
+        }
+      }))
+    } catch (err) {
+      console.error('Failed to mark comments as read:', err)
+    }
+  }
+
+  const openDiscussionModal = async (submissionId: string, modelName: string) => {
+    setDiscussionModal({ submissionId, modelName })
+    // Load comments if not already loaded
+    if (!comments[submissionId]?.messages?.length && !comments[submissionId]?.loading) {
+      setComments(prev => ({
+        ...prev,
+        [submissionId]: {
+          messages: prev[submissionId]?.messages || [],
+          loading: true,
+          error: '',
+          expanded: prev[submissionId]?.expanded || false,
+          unreadCount: prev[submissionId]?.unreadCount || 0,
+          readStatuses: prev[submissionId]?.readStatuses || []
+        }
+      }))
+      await loadComments(submissionId)
+    }
   }
 
   const formatDate = (dateStr: string) => {
@@ -252,31 +296,45 @@ export default function SubmissionsTab({ groupId, proteinPdbId }: Props) {
 
                       {/* Comments Section */}
                       <div className="border-t pt-4">
-                        <button
-                          onClick={() => toggleComments(model.submission!.id)}
-                          className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-blue-600"
-                        >
-                          <svg
-                            className={`w-4 h-4 transition-transform ${comments[model.submission.id]?.expanded ? 'rotate-90' : ''}`}
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => toggleComments(model.submission!.id)}
+                            className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-blue-600"
                           >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                          </svg>
-                          Comments
-                          {comments[model.submission.id]?.messages?.length > 0 && (
-                            <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">
-                              {comments[model.submission.id].messages.length}
-                            </span>
-                          )}
-                        </button>
+                            <svg
+                              className={`w-4 h-4 transition-transform ${comments[model.submission.id]?.expanded ? 'rotate-90' : ''}`}
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                            </svg>
+                            Comments
+                            {comments[model.submission.id]?.messages?.length > 0 && (
+                              <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">
+                                {comments[model.submission.id].messages.length}
+                              </span>
+                            )}
+                            {(comments[model.submission.id]?.unreadCount ?? model.submission?.unreadCount ?? 0) > 0 && (
+                              <span className="w-2 h-2 bg-red-500 rounded-full" title="Unread comments" />
+                            )}
+                          </button>
+                          <button
+                            onClick={() => openDiscussionModal(model.submission!.id, model.name)}
+                            className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                            title="Open in full view"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                            </svg>
+                          </button>
+                        </div>
 
                         {comments[model.submission.id]?.expanded && (
-                          <div className="mt-3 bg-gray-50 rounded-lg p-4" style={{ maxHeight: '400px' }}>
+                          <div className="mt-3 bg-gray-50 rounded-lg p-4 overflow-hidden" style={{ height: '400px' }}>
                             <CommentThread
                               messages={comments[model.submission.id]?.messages || []}
                               loading={comments[model.submission.id]?.loading || false}
@@ -286,6 +344,8 @@ export default function SubmissionsTab({ groupId, proteinPdbId }: Props) {
                               placeholder="Write a comment..."
                               emptyMessage="No comments yet. Start the conversation!"
                               currentUserId={user?.id}
+                              onMarkRead={(lastReadAt) => markCommentsRead(model.submission!.id, lastReadAt)}
+                              readStatuses={comments[model.submission.id]?.readStatuses || []}
                             />
                           </div>
                         )}
@@ -333,6 +393,23 @@ export default function SubmissionsTab({ groupId, proteinPdbId }: Props) {
         modelName={viewer.modelName}
         proteinPdbId={viewer.proteinPdbId}
       />
+
+      {/* Discussion Modal */}
+      {discussionModal && (
+        <DiscussionModal
+          isOpen={true}
+          onClose={() => setDiscussionModal(null)}
+          title={`${discussionModal.modelName} Discussion`}
+          messages={comments[discussionModal.submissionId]?.messages || []}
+          loading={comments[discussionModal.submissionId]?.loading || false}
+          error={comments[discussionModal.submissionId]?.error || ''}
+          onPost={(content) => postComment(discussionModal.submissionId, content)}
+          onRefresh={() => loadComments(discussionModal.submissionId)}
+          currentUserId={user?.id}
+          onMarkRead={(lastReadAt) => markCommentsRead(discussionModal.submissionId, lastReadAt)}
+          readStatuses={comments[discussionModal.submissionId]?.readStatuses || []}
+        />
+      )}
     </div>
   )
 }

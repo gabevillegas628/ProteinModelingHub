@@ -37,10 +37,11 @@ model User {
   updatedAt            DateTime  @updatedAt
 
   // Relations
-  groupMemberships GroupMember[]
-  submissions      Submission[]
-  messages         Message[]
-  literature       Literature[]
+  groupMemberships  GroupMember[]
+  submissions       Submission[]
+  messages          Message[]
+  literature        Literature[]
+  messageReadStatus MessageReadStatus[]
 
   @@map("users")
 }
@@ -78,10 +79,11 @@ model Group {
   updatedAt    DateTime @updatedAt
 
   // Relations
-  members    GroupMember[]
-  submissions Submission[]
-  messages   Message[]
-  literature Literature[]
+  members           GroupMember[]
+  submissions       Submission[]
+  messages          Message[]
+  literature        Literature[]
+  messageReadStatus MessageReadStatus[]
 
   @@map("groups")
 }
@@ -155,6 +157,27 @@ model Message {
   @@index([groupId, createdAt])
   @@index([submissionId, createdAt])
   @@map("messages")
+}
+
+// ============================================
+// MESSAGE READ STATUS
+// Tracks the last-read timestamp per user per discussion context
+// submissionId = NULL means group chat, SET means submission comments
+// ============================================
+model MessageReadStatus {
+  id           String   @id @default(cuid())
+  userId       String
+  groupId      String
+  submissionId String?  // NULL = group chat, SET = submission comments
+  lastReadAt   DateTime
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId, submissionId])
+  @@index([userId])
+  @@map("message_read_status")
 }
 
 // ============================================

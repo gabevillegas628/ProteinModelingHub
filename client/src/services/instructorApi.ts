@@ -71,6 +71,7 @@ export interface Submission {
     firstName: string;
     lastName: string;
   };
+  unreadCount?: number;
 }
 
 export interface ModelTemplate {

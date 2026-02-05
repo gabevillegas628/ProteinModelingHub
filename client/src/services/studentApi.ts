@@ -61,6 +61,7 @@ export interface Submission {
   feedback: string | null;
   createdAt: string;
   updatedAt: string;
+  unreadCount?: number;
 }
 
 export interface ModelWithSubmission extends ModelTemplate {

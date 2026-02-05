@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef } from 'react'
-import type { Message } from '../../services/messageApi'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import type { Message, ReadStatus } from '../../services/messageApi'
 
 interface Props {
   messages: Message[]
@@ -10,6 +10,8 @@ interface Props {
   placeholder?: string
   emptyMessage?: string
   currentUserId?: string
+  onMarkRead?: (lastReadAt: string) => void
+  readStatuses?: ReadStatus[]
 }
 
 export default function CommentThread({
@@ -20,19 +22,74 @@ export default function CommentThread({
   onRefresh,
   placeholder = 'Write a comment...',
   emptyMessage = 'No comments yet. Be the first to comment!',
-  currentUserId
+  currentUserId,
+  onMarkRead,
+  readStatuses = []
 }: Props) {
   const [newMessage, setNewMessage] = useState('')
   const [posting, setPosting] = useState(false)
   const [postError, setPostError] = useState('')
-  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesListRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const lastMarkedReadRef = useRef<string | null>(null)
+  const shouldScrollRef = useRef(false)
 
-  // Auto-scroll to bottom when new messages arrive
-  useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+  // Scroll to bottom within the messages container only (not the page)
+  const scrollToBottom = useCallback(() => {
+    if (messagesListRef.current) {
+      messagesListRef.current.scrollTop = messagesListRef.current.scrollHeight
     }
-  }, [messages])
+  }, [])
+
+  // Auto-scroll only when user sends a message
+  useEffect(() => {
+    if (shouldScrollRef.current) {
+      scrollToBottom()
+      shouldScrollRef.current = false
+    }
+  }, [messages, scrollToBottom])
+
+  // Mark messages as read when the component is visible
+  const markAsRead = useCallback(() => {
+    if (!onMarkRead || messages.length === 0 || loading) return
+
+    const newestMessage = messages[messages.length - 1]
+    // Only mark if we haven't already marked this message
+    if (lastMarkedReadRef.current !== newestMessage.createdAt) {
+      lastMarkedReadRef.current = newestMessage.createdAt
+      onMarkRead(newestMessage.createdAt)
+    }
+  }, [onMarkRead, messages, loading])
+
+  // Use Intersection Observer to detect when component becomes visible
+  useEffect(() => {
+    if (!containerRef.current || !onMarkRead) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            markAsRead()
+          }
+        })
+      },
+      { threshold: 0.1 }
+    )
+
+    observer.observe(containerRef.current)
+    return () => observer.disconnect()
+  }, [markAsRead, onMarkRead])
+
+  // Also mark as read when messages change and component is already visible
+  useEffect(() => {
+    if (containerRef.current && onMarkRead) {
+      const rect = containerRef.current.getBoundingClientRect()
+      const isVisible = rect.top < window.innerHeight && rect.bottom > 0
+      if (isVisible) {
+        markAsRead()
+      }
+    }
+  }, [messages, markAsRead, onMarkRead])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -44,6 +101,8 @@ export default function CommentThread({
     try {
       await onPost(newMessage.trim())
       setNewMessage('')
+      // Flag to scroll to bottom after messages update
+      shouldScrollRef.current = true
     } catch (err) {
       setPostError(err instanceof Error ? err.message : 'Failed to post message')
     } finally {
@@ -89,6 +148,41 @@ export default function CommentThread({
     return null
   }
 
+  // Build a map of messageId -> users whose "last read" is that message
+  // Each user's read indicator appears under the last message they've seen
+  const seenByPerMessage = useMemo(() => {
+    const result: Record<string, typeof readStatuses[0]['user'][]> = {}
+
+    if (!readStatuses.length || !messages.length) return result
+
+    for (const rs of readStatuses) {
+      // Exclude current user (you don't need to see yourself in the "seen by" list)
+      if (rs.userId === currentUserId) continue
+
+      const readerTime = new Date(rs.lastReadAt).getTime()
+
+      // Find the last message this user has seen (createdAt <= lastReadAt)
+      let lastSeenMessage: Message | null = null
+      for (const msg of messages) {
+        const msgTime = new Date(msg.createdAt).getTime()
+        if (msgTime <= readerTime) {
+          lastSeenMessage = msg
+        } else {
+          break // Messages are ordered by time, so we can stop
+        }
+      }
+
+      if (lastSeenMessage) {
+        if (!result[lastSeenMessage.id]) {
+          result[lastSeenMessage.id] = []
+        }
+        result[lastSeenMessage.id].push(rs.user)
+      }
+    }
+
+    return result
+  }, [readStatuses, currentUserId, messages])
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8 text-gray-500">
@@ -102,17 +196,17 @@ export default function CommentThread({
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div ref={containerRef} className="flex flex-col h-full overflow-hidden">
       {/* Error display */}
       {error && (
-        <div className="bg-red-50 text-red-600 px-3 py-2 text-sm rounded-md mb-2 flex items-center justify-between">
+        <div className="bg-red-50 text-red-600 px-3 py-2 text-sm rounded-md mb-2 flex items-center justify-between shrink-0">
           <span>{error}</span>
           <button onClick={onRefresh} className="underline ml-2">Retry</button>
         </div>
       )}
 
       {/* Messages list */}
-      <div className="flex-1 overflow-y-auto space-y-3 mb-3">
+      <div ref={messagesListRef} className="flex-1 min-h-0 overflow-y-auto space-y-3 mb-3">
         {messages.length === 0 ? (
           <div className="text-center text-gray-500 py-4 text-sm">
             {emptyMessage}
@@ -120,10 +214,12 @@ export default function CommentThread({
         ) : (
           messages.map((message) => {
             const isOwn = message.userId === currentUserId
+            // Show "Seen by" under whichever message each user has last read
+            const seenByUsers = seenByPerMessage[message.id] || []
             return (
               <div
                 key={message.id}
-                className={`flex ${isOwn ? 'justify-end' : 'justify-start'}`}
+                className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}
               >
                 <div
                   className={`max-w-[80%] rounded-lg px-3 py-2 ${
@@ -144,15 +240,20 @@ export default function CommentThread({
                     {message.content}
                   </div>
                 </div>
+                {/* Seen by indicator - shows under the last message each user has read */}
+                {seenByUsers.length > 0 && (
+                  <div className={`text-xs text-gray-400 mt-0.5 ${isOwn ? 'mr-1' : 'ml-1'}`}>
+                    Seen by {seenByUsers.map(u => u.firstName).join(', ')}
+                  </div>
+                )}
               </div>
             )
           })
         )}
-        <div ref={messagesEndRef} />
       </div>
 
       {/* Input form */}
-      <form onSubmit={handleSubmit} className="flex gap-2">
+      <form onSubmit={handleSubmit} className="flex gap-2 shrink-0">
         <input
           type="text"
           value={newMessage}
@@ -186,7 +287,7 @@ export default function CommentThread({
 
       {/* Post error */}
       {postError && (
-        <div className="mt-2 text-red-600 text-xs">
+        <div className="mt-2 text-red-600 text-xs shrink-0">
           {postError}
         </div>
       )}

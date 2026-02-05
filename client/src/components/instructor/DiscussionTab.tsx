@@ -10,6 +10,7 @@ interface Props {
 export default function DiscussionTab({ groupId }: Props) {
   const { user } = useAuth()
   const [messages, setMessages] = useState<messageApi.Message[]>([])
+  const [readStatuses, setReadStatuses] = useState<messageApi.ReadStatus[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -23,8 +24,9 @@ export default function DiscussionTab({ groupId }: Props) {
   const loadMessages = useCallback(async () => {
     try {
       setLoading(messages.length === 0)
-      const data = await messageApi.getGroupMessages(groupId)
-      setMessages(data)
+      const response = await messageApi.getGroupMessages(groupId)
+      setMessages(response.messages)
+      setReadStatuses(response.readStatuses)
       setError('')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load messages')
@@ -36,6 +38,14 @@ export default function DiscussionTab({ groupId }: Props) {
   const handlePost = async (content: string) => {
     await messageApi.postGroupMessage(groupId, content)
     await loadMessages()
+  }
+
+  const markAsRead = async (lastReadAt: string) => {
+    try {
+      await messageApi.markGroupRead(groupId, lastReadAt)
+    } catch (err) {
+      console.error('Failed to mark messages as read:', err)
+    }
   }
 
   return (
@@ -59,6 +69,8 @@ export default function DiscussionTab({ groupId }: Props) {
           placeholder="Type a message..."
           emptyMessage="No messages yet. Start the conversation!"
           currentUserId={user?.id}
+          onMarkRead={markAsRead}
+          readStatuses={readStatuses}
         />
       </div>
     </div>
