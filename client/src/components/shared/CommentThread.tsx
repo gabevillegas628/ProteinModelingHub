@@ -236,7 +236,7 @@ export default function CommentThread({
                     <span className="mx-1.5">·</span>
                     <span>{formatTime(message.createdAt)}</span>
                   </div>
-                  <div className="text-sm whitespace-pre-wrap break-words">
+                  <div className="text-sm whitespace-pre-wrap break-all">
                     {message.content}
                   </div>
                 </div>
