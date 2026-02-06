@@ -71,12 +71,13 @@ model ModelTemplate {
 // A pair of students working on one protein
 // ============================================
 model Group {
-  id           String   @id @default(cuid())
-  name         String   // e.g., "Team Alpha" or auto-generated
-  proteinPdbId String   // PDB identifier, e.g., "1ABC"
-  proteinName  String   // Display name, e.g., "Hemoglobin"
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id                     String    @id @default(cuid())
+  name                   String    // e.g., "Team Alpha" or auto-generated
+  proteinPdbId           String    // PDB identifier, e.g., "1ABC"
+  proteinName            String    // Display name, e.g., "Hemoglobin"
+  lastReviewRequestedAt  DateTime? // When students last requested instructor review
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
 
   // Relations
   members           GroupMember[]

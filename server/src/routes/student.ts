@@ -4,6 +4,7 @@ import path from 'path';
 import fs from 'fs';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
+import { sendReviewRequestEmail } from '../services/emailService.js';
 
 const router = Router();
 
@@ -96,6 +97,52 @@ router.get('/group', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Error fetching group:', error);
     res.status(500).json({ error: 'Failed to fetch group' });
+  }
+});
+
+// Update group protein info
+router.put('/group', async (req: AuthRequest, res: Response) => {
+  try {
+    const group = await getStudentGroup(req.user!.userId);
+    if (!group) {
+      res.status(404).json({ error: 'You are not assigned to a group' });
+      return;
+    }
+
+    const { proteinPdbId, proteinName } = req.body;
+
+    // Validate PDB ID format (4 characters, alphanumeric)
+    if (proteinPdbId !== undefined) {
+      if (typeof proteinPdbId !== 'string' || !/^[a-zA-Z0-9]{4}$/.test(proteinPdbId)) {
+        res.status(400).json({ error: 'PDB ID must be exactly 4 alphanumeric characters (e.g., 1ABC)' });
+        return;
+      }
+    }
+
+    // Validate protein name
+    if (proteinName !== undefined) {
+      if (typeof proteinName !== 'string' || proteinName.trim().length === 0) {
+        res.status(400).json({ error: 'Protein name cannot be empty' });
+        return;
+      }
+      if (proteinName.length > 100) {
+        res.status(400).json({ error: 'Protein name must be 100 characters or less' });
+        return;
+      }
+    }
+
+    const updatedGroup = await prisma.group.update({
+      where: { id: group.id },
+      data: {
+        ...(proteinPdbId !== undefined && { proteinPdbId: proteinPdbId.toUpperCase() }),
+        ...(proteinName !== undefined && { proteinName: proteinName.trim() })
+      }
+    });
+
+    res.json(updatedGroup);
+  } catch (error) {
+    console.error('Error updating group:', error);
+    res.status(500).json({ error: 'Failed to update group' });
   }
 });
 
@@ -484,6 +531,167 @@ router.delete('/literature/:id', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Error deleting literature:', error);
     res.status(500).json({ error: 'Failed to delete literature' });
+  }
+});
+
+// ============================================
+// Review Request
+// ============================================
+
+const REVIEW_COOLDOWN_HOURS = 1;
+
+// Request instructor review
+router.post('/request-review', async (req: AuthRequest, res: Response) => {
+  try {
+    const group = await getStudentGroup(req.user!.userId);
+    if (!group) {
+      res.status(404).json({ error: 'You are not assigned to a group' });
+      return;
+    }
+
+    // Check cooldown
+    if (group.lastReviewRequestedAt) {
+      const hoursSinceLastRequest =
+        (Date.now() - new Date(group.lastReviewRequestedAt).getTime()) / (1000 * 60 * 60);
+      if (hoursSinceLastRequest < REVIEW_COOLDOWN_HOURS) {
+        const minutesRemaining = Math.ceil((REVIEW_COOLDOWN_HOURS - hoursSinceLastRequest) * 60);
+        res.status(429).json({
+          error: `Please wait ${minutesRemaining} more minute${minutesRemaining !== 1 ? 's' : ''} before requesting another review.`,
+          cooldownEndsAt: new Date(
+            new Date(group.lastReviewRequestedAt).getTime() + REVIEW_COOLDOWN_HOURS * 60 * 60 * 1000
+          ).toISOString()
+        });
+        return;
+      }
+    }
+
+    // Get group members (student names)
+    const members = await prisma.groupMember.findMany({
+      where: { groupId: group.id },
+      include: {
+        user: {
+          select: { firstName: true, lastName: true }
+        }
+      }
+    });
+    const studentNames = members.map(m => `${m.user.firstName} ${m.user.lastName}`);
+
+    // Get all submissions for this group with their model templates
+    const submissions = await prisma.submission.findMany({
+      where: { groupId: group.id },
+      include: {
+        modelTemplate: {
+          select: { name: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    // Get unique submissions per template (latest only)
+    const latestByTemplate = new Map<string, typeof submissions[0]>();
+    for (const sub of submissions) {
+      if (!latestByTemplate.has(sub.modelTemplateId)) {
+        latestByTemplate.set(sub.modelTemplateId, sub);
+      }
+    }
+    const uniqueSubmissions = Array.from(latestByTemplate.values());
+
+    if (uniqueSubmissions.length === 0) {
+      res.status(400).json({ error: 'No submissions to review. Please upload at least one model first.' });
+      return;
+    }
+
+    // Get all instructors
+    const instructors = await prisma.user.findMany({
+      where: {
+        role: 'INSTRUCTOR',
+        isApproved: true
+      },
+      select: { email: true, firstName: true, lastName: true }
+    });
+
+    if (instructors.length === 0) {
+      res.status(500).json({ error: 'No instructors available to notify.' });
+      return;
+    }
+
+    // Build frontend URL for the dashboard
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const dashboardUrl = `${frontendUrl}/dashboard`;
+
+    // Format submissions for email
+    const submissionInfo = uniqueSubmissions.map(s => ({
+      modelName: s.modelTemplate.name,
+      status: s.status as 'DRAFT' | 'SUBMITTED' | 'NEEDS_REVISION' | 'APPROVED',
+      fileName: s.fileName,
+      submittedAt: s.createdAt.toISOString()
+    }));
+
+    // Send email to each instructor
+    const emailPromises = instructors.map(instructor =>
+      sendReviewRequestEmail({
+        instructorEmail: instructor.email,
+        instructorName: `${instructor.firstName} ${instructor.lastName}`,
+        groupName: group.name,
+        proteinName: group.proteinName,
+        proteinPdbId: group.proteinPdbId,
+        studentNames,
+        submissions: submissionInfo,
+        dashboardUrl
+      })
+    );
+
+    const results = await Promise.all(emailPromises);
+    const successCount = results.filter(r => r).length;
+
+    // Update the last review requested timestamp
+    await prisma.group.update({
+      where: { id: group.id },
+      data: { lastReviewRequestedAt: new Date() }
+    });
+
+    res.json({
+      success: true,
+      message: `Review request sent to ${successCount} instructor${successCount !== 1 ? 's' : ''}.`,
+      lastReviewRequestedAt: new Date().toISOString()
+    });
+  } catch (error) {
+    console.error('Error requesting review:', error);
+    res.status(500).json({ error: 'Failed to send review request' });
+  }
+});
+
+// Get review request status (for showing cooldown in UI)
+router.get('/review-status', async (req: AuthRequest, res: Response) => {
+  try {
+    const group = await getStudentGroup(req.user!.userId);
+    if (!group) {
+      res.status(404).json({ error: 'You are not assigned to a group' });
+      return;
+    }
+
+    let canRequest = true;
+    let cooldownEndsAt: string | null = null;
+
+    if (group.lastReviewRequestedAt) {
+      const hoursSinceLastRequest =
+        (Date.now() - new Date(group.lastReviewRequestedAt).getTime()) / (1000 * 60 * 60);
+      if (hoursSinceLastRequest < REVIEW_COOLDOWN_HOURS) {
+        canRequest = false;
+        cooldownEndsAt = new Date(
+          new Date(group.lastReviewRequestedAt).getTime() + REVIEW_COOLDOWN_HOURS * 60 * 60 * 1000
+        ).toISOString();
+      }
+    }
+
+    res.json({
+      lastReviewRequestedAt: group.lastReviewRequestedAt?.toISOString() || null,
+      canRequest,
+      cooldownEndsAt
+    });
+  } catch (error) {
+    console.error('Error getting review status:', error);
+    res.status(500).json({ error: 'Failed to get review status' });
   }
 });
 

@@ -5,9 +5,10 @@ import { useAuth } from '../../context/AuthContext'
 
 interface Props {
   groupId: string
+  onMessagesRead?: () => void
 }
 
-export default function DiscussionTab({ groupId }: Props) {
+export default function DiscussionTab({ groupId, onMessagesRead }: Props) {
   const { user } = useAuth()
   const [messages, setMessages] = useState<messageApi.Message[]>([])
   const [readStatuses, setReadStatuses] = useState<messageApi.ReadStatus[]>([])
@@ -43,6 +44,7 @@ export default function DiscussionTab({ groupId }: Props) {
   const markAsRead = async (lastReadAt: string) => {
     try {
       await messageApi.markGroupRead(groupId, lastReadAt)
+      onMessagesRead?.()
     } catch (err) {
       console.error('Failed to mark messages as read:', err)
     }

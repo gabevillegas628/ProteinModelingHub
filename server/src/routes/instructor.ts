@@ -21,10 +21,20 @@ const LITERATURE_DIR = path.join(UPLOAD_BASE, 'literature');
 // ============================================
 
 // Get all groups (instructors can see all groups)
-router.get('/groups', async (_req: AuthRequest, res: Response) => {
+router.get('/groups', async (req: AuthRequest, res: Response) => {
   try {
+    const userId = req.user!.userId;
+
     const groups = await prisma.group.findMany({
       orderBy: { name: 'asc' }
+    });
+
+    // Get user's read statuses for group discussions (submissionId is null for group chat)
+    const readStatuses = await prisma.messageReadStatus.findMany({
+      where: {
+        userId,
+        submissionId: null
+      }
     });
 
     // Get submission counts for each group
@@ -40,11 +50,22 @@ router.get('/groups', async (_req: AuthRequest, res: Response) => {
           where: { groupId: group.id }
         });
 
+        // Get unread message count for group discussion
+        const readStatus = readStatuses.find(rs => rs.groupId === group.id);
+        const unreadMessageCount = await prisma.message.count({
+          where: {
+            groupId: group.id,
+            submissionId: null, // Only group chat messages, not submission comments
+            ...(readStatus ? { createdAt: { gt: readStatus.lastReadAt } } : {})
+          }
+        });
+
         return {
           ...group,
           submissionCount,
           pendingCount,
-          memberCount
+          memberCount,
+          unreadMessageCount
         };
       })
     );

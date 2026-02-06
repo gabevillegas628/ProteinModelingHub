@@ -119,7 +119,14 @@ export default function Dashboard() {
                       : 'hover:bg-gray-50'
                   }`}
                 >
-                  <div className="font-medium text-gray-800 truncate">{group.name}</div>
+                  <div className="flex items-center justify-between">
+                    <div className="font-medium text-gray-800 truncate">{group.name}</div>
+                    {group.unreadMessageCount > 0 && (
+                      <span className="bg-red-500 text-white text-xs font-medium px-2 py-0.5 rounded-full min-w-5 text-center">
+                        {group.unreadMessageCount}
+                      </span>
+                    )}
+                  </div>
                   <div className="text-xs text-gray-500 mt-1 truncate">
                     {group.proteinName} ({group.proteinPdbId})
                   </div>
@@ -184,7 +191,7 @@ export default function Dashboard() {
                   <InstructorLiteratureTab groupId={selectedGroup.id} />
                 )}
                 {activeTab === 'discussion' && (
-                  <InstructorDiscussionTab groupId={selectedGroup.id} />
+                  <InstructorDiscussionTab groupId={selectedGroup.id} onMessagesRead={loadGroups} />
                 )}
               </div>
             </>

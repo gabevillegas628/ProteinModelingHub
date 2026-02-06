@@ -98,6 +98,18 @@ export function getGroup(): Promise<Group> {
   return request('/group');
 }
 
+export interface UpdateGroupParams {
+  proteinPdbId?: string;
+  proteinName?: string;
+}
+
+export function updateGroup(params: UpdateGroupParams): Promise<Group> {
+  return request('/group', {
+    method: 'PUT',
+    body: JSON.stringify(params)
+  });
+}
+
 // ============================================
 // Models & Submissions
 // ============================================
@@ -151,4 +163,28 @@ export function getLiteratureFileUrl(id: string): string {
 
 export function deleteLiterature(id: string): Promise<{ success: boolean }> {
   return request(`/literature/${id}`, { method: 'DELETE' });
+}
+
+// ============================================
+// Review Request
+// ============================================
+
+export interface ReviewStatus {
+  lastReviewRequestedAt: string | null;
+  canRequest: boolean;
+  cooldownEndsAt: string | null;
+}
+
+export interface ReviewRequestResponse {
+  success: boolean;
+  message: string;
+  lastReviewRequestedAt: string;
+}
+
+export function getReviewStatus(): Promise<ReviewStatus> {
+  return request('/review-status');
+}
+
+export function requestReview(): Promise<ReviewRequestResponse> {
+  return request('/request-review', { method: 'POST' });
 }

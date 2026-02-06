@@ -34,10 +34,31 @@ export default function ModelsTab() {
   const [comments, setComments] = useState<CommentsState>({})
   const [discussionModal, setDiscussionModal] = useState<{ submissionId: string; modelName: string } | null>(null)
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const [reviewStatus, setReviewStatus] = useState<studentApi.ReviewStatus | null>(null)
+  const [requestingReview, setRequestingReview] = useState(false)
+  const [reviewMessage, setReviewMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
+  const [editingProtein, setEditingProtein] = useState(false)
+  const [proteinForm, setProteinForm] = useState({ pdbId: '', name: '' })
+  const [savingProtein, setSavingProtein] = useState(false)
 
   useEffect(() => {
     loadModels()
+    loadReviewStatus()
   }, [])
+
+  // Update cooldown timer every minute
+  useEffect(() => {
+    if (reviewStatus?.cooldownEndsAt) {
+      const interval = setInterval(() => {
+        const now = Date.now()
+        const endTime = new Date(reviewStatus.cooldownEndsAt!).getTime()
+        if (now >= endTime) {
+          setReviewStatus(prev => prev ? { ...prev, canRequest: true, cooldownEndsAt: null } : null)
+        }
+      }, 60000)
+      return () => clearInterval(interval)
+    }
+  }, [reviewStatus?.cooldownEndsAt])
 
   const loadModels = async () => {
     try {
@@ -48,6 +69,75 @@ export default function ModelsTab() {
       setError(err instanceof Error ? err.message : 'Failed to load models')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadReviewStatus = async () => {
+    try {
+      const status = await studentApi.getReviewStatus()
+      setReviewStatus(status)
+    } catch (err) {
+      console.error('Failed to load review status:', err)
+    }
+  }
+
+  const handleRequestReview = async () => {
+    try {
+      setRequestingReview(true)
+      setReviewMessage(null)
+      const response = await studentApi.requestReview()
+      setReviewMessage({ type: 'success', text: response.message })
+      setReviewStatus({
+        lastReviewRequestedAt: response.lastReviewRequestedAt,
+        canRequest: false,
+        cooldownEndsAt: new Date(new Date(response.lastReviewRequestedAt).getTime() + 60 * 60 * 1000).toISOString()
+      })
+    } catch (err) {
+      setReviewMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to request review' })
+    } finally {
+      setRequestingReview(false)
+    }
+  }
+
+  const formatCooldownTime = (endTime: string) => {
+    const remaining = new Date(endTime).getTime() - Date.now()
+    if (remaining <= 0) return null
+    const minutes = Math.ceil(remaining / (1000 * 60))
+    if (minutes >= 60) {
+      return `${Math.floor(minutes / 60)}h ${minutes % 60}m`
+    }
+    return `${minutes}m`
+  }
+
+  const startEditingProtein = () => {
+    if (data) {
+      setProteinForm({
+        pdbId: data.group.proteinPdbId,
+        name: data.group.proteinName
+      })
+      setEditingProtein(true)
+    }
+  }
+
+  const cancelEditingProtein = () => {
+    setEditingProtein(false)
+    setError('')
+  }
+
+  const saveProteinInfo = async () => {
+    try {
+      setSavingProtein(true)
+      setError('')
+      const updated = await studentApi.updateGroup({
+        proteinPdbId: proteinForm.pdbId,
+        proteinName: proteinForm.name
+      })
+      setData(prev => prev ? { ...prev, group: updated } : null)
+      setEditingProtein(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update protein info')
+    } finally {
+      setSavingProtein(false)
     }
   }
 
@@ -226,12 +316,105 @@ export default function ModelsTab() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h2 className="text-lg font-semibold text-gray-800">Your Models</h2>
-        <p className="text-sm text-gray-500">
-          Group: {data.group.name} | Protein: {data.group.proteinName} ({data.group.proteinPdbId})
-        </p>
+      <div className="mb-6 flex justify-between items-start">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-800">Your Models</h2>
+          {editingProtein ? (
+            <div className="mt-2 flex items-center gap-3">
+              <span className="text-sm text-gray-500">Group: {data.group.name} |</span>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={proteinForm.name}
+                  onChange={(e) => setProteinForm(prev => ({ ...prev, name: e.target.value }))}
+                  placeholder="Protein name"
+                  className="px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  style={{ width: '150px' }}
+                />
+                <input
+                  type="text"
+                  value={proteinForm.pdbId}
+                  onChange={(e) => setProteinForm(prev => ({ ...prev, pdbId: e.target.value.toUpperCase() }))}
+                  placeholder="PDB ID"
+                  maxLength={4}
+                  className="px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500 uppercase"
+                  style={{ width: '70px' }}
+                />
+                <button
+                  onClick={saveProteinInfo}
+                  disabled={savingProtein || !proteinForm.pdbId || !proteinForm.name.trim()}
+                  className="px-2 py-1 text-sm bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400"
+                >
+                  {savingProtein ? 'Saving...' : 'Save'}
+                </button>
+                <button
+                  onClick={cancelEditingProtein}
+                  className="px-2 py-1 text-sm text-gray-600 hover:text-gray-800"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500">
+              Group: {data.group.name} | Protein: {data.group.proteinName} ({data.group.proteinPdbId})
+              <button
+                onClick={startEditingProtein}
+                className="ml-2 text-blue-600 hover:text-blue-800 hover:underline"
+                title="Edit protein info"
+              >
+                <svg className="w-4 h-4 inline" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+              </button>
+            </p>
+          )}
+        </div>
+
+        {/* Request Review Section */}
+        <div className="flex flex-col items-end gap-2">
+          <button
+            onClick={handleRequestReview}
+            disabled={requestingReview || !reviewStatus?.canRequest}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
+              reviewStatus?.canRequest
+                ? 'bg-green-600 text-white hover:bg-green-700'
+                : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+            }`}
+            title={reviewStatus?.canRequest ? 'Send an email to instructors with your current submissions' : 'Please wait before requesting another review'}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+            </svg>
+            {requestingReview ? 'Sending...' : 'Request Review'}
+          </button>
+          {reviewStatus?.cooldownEndsAt && formatCooldownTime(reviewStatus.cooldownEndsAt) && (
+            <span className="text-xs text-gray-500">
+              Available again in {formatCooldownTime(reviewStatus.cooldownEndsAt)}
+            </span>
+          )}
+          {reviewStatus?.lastReviewRequestedAt && reviewStatus.canRequest && (
+            <span className="text-xs text-gray-500">
+              Last requested: {new Date(reviewStatus.lastReviewRequestedAt).toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              })}
+            </span>
+          )}
+        </div>
       </div>
+
+      {/* Review Request Message */}
+      {reviewMessage && (
+        <div className={`mb-4 p-3 rounded-md ${
+          reviewMessage.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'
+        }`}>
+          {reviewMessage.text}
+          <button onClick={() => setReviewMessage(null)} className="ml-2 underline">Dismiss</button>
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-50 text-red-600 p-3 rounded-md mb-4">

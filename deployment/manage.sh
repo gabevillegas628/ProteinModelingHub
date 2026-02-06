@@ -89,6 +89,7 @@ rebuild_app() {
     # Update server code
     echo "Updating server code..."
     rm -rf "$INSTANCE_DIR/server/src"
+    rm -rf "$INSTANCE_DIR/server/prisma"
     cp -r "$PROJECT_DIR/server/src" "$INSTANCE_DIR/server/src"
     cp "$PROJECT_DIR/server/package.json" "$INSTANCE_DIR/server/package.json"
     cp "$PROJECT_DIR/server/tsconfig.json" "$INSTANCE_DIR/server/tsconfig.json"
@@ -97,6 +98,7 @@ rebuild_app() {
     # Update client code
     echo "Updating client code..."
     rm -rf "$INSTANCE_DIR/client/src" 2>/dev/null || true
+    rm -rf "$INSTANCE_DIR/client/public" 2>/dev/null || true
     mkdir -p "$INSTANCE_DIR/client"
     cp -r "$PROJECT_DIR/client/src" "$INSTANCE_DIR/client/src"
     cp -r "$PROJECT_DIR/client/public" "$INSTANCE_DIR/client/public"
@@ -118,14 +120,16 @@ rebuild_app() {
     echo "Running migrations..."
     cd "$INSTANCE_DIR/server"
     # Clear Prisma generated client cache to ensure fresh generation from updated schema
-    # Note: Only remove .prisma (generated), NOT @prisma/client (npm package needed for re-export)
     rm -rf node_modules/.prisma
-    npx prisma generate
-    npx prisma db push
+    npx prisma generate --schema=prisma/schema.prisma
+    npx prisma db push --schema=prisma/schema.prisma
 
     # Build
     echo "Building..."
     cd "$INSTANCE_DIR/server"
+    # Clear TypeScript build cache to ensure fresh compilation with new Prisma types
+    rm -rf dist
+    rm -f tsconfig.tsbuildinfo
     npm run build
 
     cd "$INSTANCE_DIR/client"

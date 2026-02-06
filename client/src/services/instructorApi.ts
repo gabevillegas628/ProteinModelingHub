@@ -38,6 +38,7 @@ export interface Group {
   submissionCount: number;
   pendingCount: number;
   memberCount: number;
+  unreadMessageCount: number;
 }
 
 export interface GroupMember {
