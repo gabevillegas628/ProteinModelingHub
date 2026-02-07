@@ -440,13 +440,27 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
       const filename = `export_${Date.now()}.png`
       console.log('About to call JSmol write command...')
 
+      // Intercept window.prompt to auto-respond to JSmol's filename dialog
+      const originalPrompt = window.prompt
+      window.prompt = (message?: string) => {
+        console.log('Intercepted prompt:', message)
+        // Return the filename to auto-confirm the dialog
+        return filename
+      }
+
       try {
         window.Jmol.script(appletRef.current!, `write "${filename}" as pngj`)
         console.log('JSmol write command executed')
       } catch (scriptErr) {
         console.error('JSmol script error:', scriptErr)
         HTMLAnchorElement.prototype.click = originalClick
+        window.prompt = originalPrompt
         throw scriptErr
+      } finally {
+        // Restore original prompt after a short delay to ensure JSmol has finished
+        setTimeout(() => {
+          window.prompt = originalPrompt
+        }, 100)
       }
 
       // Wait for the blob to be captured
