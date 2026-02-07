@@ -358,110 +358,87 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     setIsSubmitting(true)
 
     try {
-      // Use MutationObserver to watch for anchor elements with download attribute
-      // This is more reliable than patching URL.createObjectURL which JSmol may have cached
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        let captured = false
+      // Set up interception BEFORE triggering the write
+      const originalClick = HTMLAnchorElement.prototype.click
+      let captured = false
+      let resolveBlob: (blob: Blob) => void
+      let rejectBlob: (err: Error) => void
 
-        const timeoutId = setTimeout(() => {
-          observer.disconnect()
-          if (!captured) {
-            reject(new Error('Timeout waiting for PNGJ download from JSmol'))
-          }
-        }, 5000)
+      const blobPromise = new Promise<Blob>((resolve, reject) => {
+        resolveBlob = resolve
+        rejectBlob = reject
+      })
 
-        // Watch for anchor elements being added to the DOM
-        const observer = new MutationObserver((mutations) => {
-          for (const mutation of mutations) {
-            for (const node of mutation.addedNodes) {
-              if (node instanceof HTMLAnchorElement && node.download && node.href.startsWith('blob:')) {
-                console.log('Detected download anchor:', node.href, 'filename:', node.download)
+      const timeoutId = setTimeout(() => {
+        HTMLAnchorElement.prototype.click = originalClick
+        if (!captured) {
+          rejectBlob(new Error('Timeout waiting for PNGJ download from JSmol'))
+        }
+      }, 5000)
 
-                // Fetch the blob from the URL
-                fetch(node.href)
-                  .then(response => response.blob())
-                  .then(fetchedBlob => {
-                    console.log('Fetched blob:', fetchedBlob.size, 'bytes')
-                    captured = true
-                    clearTimeout(timeoutId)
-                    observer.disconnect()
-
-                    // Remove the anchor to prevent download
-                    node.remove()
-                    // Revoke the blob URL
-                    URL.revokeObjectURL(node.href)
-
-                    resolve(fetchedBlob)
-                  })
-                  .catch(err => {
-                    console.error('Failed to fetch blob:', err)
-                    reject(err)
-                  })
-
-                // Prevent the click from happening
-                node.onclick = (e) => {
-                  e.preventDefault()
-                  e.stopPropagation()
-                  return false
-                }
-
-                return
-              }
-            }
-          }
+      HTMLAnchorElement.prototype.click = function(this: HTMLAnchorElement) {
+        console.log('Anchor click intercepted:', {
+          href: this.href,
+          download: this.download,
+          tagName: this.tagName
         })
 
-        // Start observing the entire document for added nodes
-        observer.observe(document.body, { childList: true, subtree: true })
+        if (this.download && this.href && this.href.startsWith('blob:') && !captured) {
+          console.log('Found PNGJ blob URL:', this.href)
 
-        // Also try to intercept any programmatic clicks on anchors
-        const originalClick = HTMLAnchorElement.prototype.click
-        const clickHandler = function(this: HTMLAnchorElement) {
-          if (this.download && this.href.startsWith('blob:') && !captured) {
-            console.log('Intercepted anchor click:', this.href)
+          // Fetch the blob
+          fetch(this.href)
+            .then(response => {
+              console.log('Fetch response status:', response.status)
+              return response.blob()
+            })
+            .then(fetchedBlob => {
+              console.log('Successfully fetched blob:', fetchedBlob.size, 'bytes, type:', fetchedBlob.type)
+              captured = true
+              clearTimeout(timeoutId)
+              HTMLAnchorElement.prototype.click = originalClick
+              resolveBlob(fetchedBlob)
+            })
+            .catch(err => {
+              console.error('Failed to fetch blob:', err)
+              HTMLAnchorElement.prototype.click = originalClick
+              rejectBlob(err)
+            })
 
-            // Fetch the blob
-            fetch(this.href)
-              .then(response => response.blob())
-              .then(fetchedBlob => {
-                console.log('Fetched blob from click intercept:', fetchedBlob.size, 'bytes')
-                captured = true
-                clearTimeout(timeoutId)
-                observer.disconnect()
-                HTMLAnchorElement.prototype.click = originalClick
-
-                // Revoke the blob URL
-                URL.revokeObjectURL(this.href)
-
-                resolve(fetchedBlob)
-              })
-              .catch(err => {
-                HTMLAnchorElement.prototype.click = originalClick
-                reject(err)
-              })
-
-            // Don't proceed with the actual click/download
-            return
-          }
+          // Let the download proceed normally so JSmol doesn't error
           originalClick.call(this)
+          return
         }
-        HTMLAnchorElement.prototype.click = clickHandler
 
-        // Trigger JSmol to write the PNGJ
-        const filename = `export_${Date.now()}.png`
-        console.log('Triggering JSmol write command for submission...')
+        originalClick.call(this)
+      }
+
+      // Trigger JSmol to write the PNGJ
+      const filename = `export_${Date.now()}.png`
+      console.log('About to call JSmol write command...')
+
+      try {
         window.Jmol.script(appletRef.current!, `write "${filename}" as pngj`)
-      })
+        console.log('JSmol write command executed')
+      } catch (scriptErr) {
+        console.error('JSmol script error:', scriptErr)
+        HTMLAnchorElement.prototype.click = originalClick
+        throw scriptErr
+      }
+
+      // Wait for the blob to be captured
+      console.log('Waiting for blob capture...')
+      const blob = await blobPromise
 
       console.log('Got PNGJ blob:', blob.size, 'bytes')
 
       // Create File from Blob
       const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')
       const safeName = modelName.replace(/[^a-zA-Z0-9]/g, '_')
-      const filename = `${safeName}_${timestamp}.png`
-      const file = new File([blob], filename, { type: 'image/png' })
+      const filename2 = `${safeName}_${timestamp}.png`
+      const file = new File([blob], filename2, { type: 'image/png' })
 
-      console.log('Created file:', filename, 'size:', file.size)
+      console.log('Created file:', filename2, 'size:', file.size)
 
       // Call the onSubmit callback
       await onSubmit(templateId, file)
