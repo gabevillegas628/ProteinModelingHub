@@ -351,54 +351,101 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     window.Jmol.script(appletRef.current, `write "${filename}" as pngj`)
   }
 
-  // Submit current view as PNGJ to the server by intercepting the blob creation
+  // Submit current view as PNGJ to the server by intercepting the download
   const handleSubmitPngj = async () => {
     if (!appletRef.current || !window.Jmol || !templateId || !onSubmit) return
 
     setIsSubmitting(true)
 
     try {
-      // Capture the blob by intercepting URL.createObjectURL
+      // Use MutationObserver to watch for anchor elements with download attribute
+      // This is more reliable than patching URL.createObjectURL which JSmol may have cached
       const blob = await new Promise<Blob>((resolve, reject) => {
-        const originalCreateObjectURL = URL.createObjectURL
         let captured = false
+
         const timeoutId = setTimeout(() => {
-          URL.createObjectURL = originalCreateObjectURL
+          observer.disconnect()
           if (!captured) {
-            reject(new Error('Timeout waiting for PNGJ data from JSmol'))
+            reject(new Error('Timeout waiting for PNGJ download from JSmol'))
           }
         }, 5000)
 
-        // Intercept URL.createObjectURL to capture the blob
-        URL.createObjectURL = function(obj: Blob | MediaSource): string {
-          // Restore original immediately after first call
-          URL.createObjectURL = originalCreateObjectURL
-          clearTimeout(timeoutId)
+        // Watch for anchor elements being added to the DOM
+        const observer = new MutationObserver((mutations) => {
+          for (const mutation of mutations) {
+            for (const node of mutation.addedNodes) {
+              if (node instanceof HTMLAnchorElement && node.download && node.href.startsWith('blob:')) {
+                console.log('Detected download anchor:', node.href, 'filename:', node.download)
 
-          if (obj instanceof Blob) {
-            console.log('Captured blob from JSmol:', obj.size, 'bytes, type:', obj.type)
-            captured = true
-            resolve(obj)
-            // Return a dummy URL since we don't want the download to proceed
-            // But we need to return something valid to not break JSmol
-            return 'blob:captured'
+                // Fetch the blob from the URL
+                fetch(node.href)
+                  .then(response => response.blob())
+                  .then(fetchedBlob => {
+                    console.log('Fetched blob:', fetchedBlob.size, 'bytes')
+                    captured = true
+                    clearTimeout(timeoutId)
+                    observer.disconnect()
+
+                    // Remove the anchor to prevent download
+                    node.remove()
+                    // Revoke the blob URL
+                    URL.revokeObjectURL(node.href)
+
+                    resolve(fetchedBlob)
+                  })
+                  .catch(err => {
+                    console.error('Failed to fetch blob:', err)
+                    reject(err)
+                  })
+
+                // Prevent the click from happening
+                node.onclick = (e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  return false
+                }
+
+                return
+              }
+            }
           }
+        })
 
-          // For non-Blob objects, use original behavior
-          return originalCreateObjectURL.call(URL, obj)
-        }
+        // Start observing the entire document for added nodes
+        observer.observe(document.body, { childList: true, subtree: true })
 
-        // Also intercept anchor clicks to prevent the download dialog
+        // Also try to intercept any programmatic clicks on anchors
         const originalClick = HTMLAnchorElement.prototype.click
-        HTMLAnchorElement.prototype.click = function(this: HTMLAnchorElement) {
-          if (this.href === 'blob:captured') {
-            // This is our captured blob, don't trigger download
-            console.log('Blocked download of captured blob')
-            HTMLAnchorElement.prototype.click = originalClick
+        const clickHandler = function(this: HTMLAnchorElement) {
+          if (this.download && this.href.startsWith('blob:') && !captured) {
+            console.log('Intercepted anchor click:', this.href)
+
+            // Fetch the blob
+            fetch(this.href)
+              .then(response => response.blob())
+              .then(fetchedBlob => {
+                console.log('Fetched blob from click intercept:', fetchedBlob.size, 'bytes')
+                captured = true
+                clearTimeout(timeoutId)
+                observer.disconnect()
+                HTMLAnchorElement.prototype.click = originalClick
+
+                // Revoke the blob URL
+                URL.revokeObjectURL(this.href)
+
+                resolve(fetchedBlob)
+              })
+              .catch(err => {
+                HTMLAnchorElement.prototype.click = originalClick
+                reject(err)
+              })
+
+            // Don't proceed with the actual click/download
             return
           }
           originalClick.call(this)
         }
+        HTMLAnchorElement.prototype.click = clickHandler
 
         // Trigger JSmol to write the PNGJ
         const filename = `export_${Date.now()}.png`
