@@ -217,14 +217,9 @@ export async function sendReviewRequestEmail({
 
         <!-- Group Info Card -->
         <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0;">
-          <div style="display: flex; align-items: center; margin-bottom: 12px;">
-            <div style="background: #1e40af; color: white; width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 18px; margin-right: 12px;">
-              ${proteinPdbId.substring(0, 2).toUpperCase()}
-            </div>
-            <div>
-              <div style="font-weight: 600; color: #1e293b;">${proteinName}</div>
-              <div style="font-size: 13px; color: #64748b;">PDB: ${proteinPdbId}</div>
-            </div>
+          <div style="margin-bottom: 8px;">
+            <span style="font-weight: 600; color: #1e293b;">${proteinName}</span>
+            <span style="font-size: 13px; color: #64748b; margin-left: 8px;">PDB: ${proteinPdbId}</span>
           </div>
           <div style="font-size: 14px; color: #475569;">
             <strong>Students:</strong> ${studentNames.join(', ')}

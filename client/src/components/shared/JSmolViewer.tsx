@@ -40,12 +40,14 @@ interface JSmolViewerProps {
   fileUrl: string;
   modelName: string;
   proteinPdbId?: string;
+  templateId?: string;
+  onSubmit?: (templateId: string, file: File) => Promise<void>;
 }
 
 type DisplayStyle = 'cartoon' | 'ribbon' | 'trace' | 'wireframe' | 'spacefill' | 'ball+stick';
 type ColorScheme = 'structure' | 'chain' | 'cpk' | 'amino' | 'temperature' | 'group';
 
-export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, proteinPdbId }: JSmolViewerProps) {
+export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, proteinPdbId, templateId, onSubmit }: JSmolViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const consoleRef = useRef<HTMLDivElement>(null)
   const appletRef = useRef<JmolApplet | null>(null)
@@ -63,6 +65,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   const [commandHistory, setCommandHistory] = useState<string[]>([])
   const [historyIndex, setHistoryIndex] = useState(-1)
   const [consoleLog, setConsoleLog] = useState<Array<{ type: 'command' | 'output' | 'error', text: string }>>([])
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   useEffect(() => {
     if (!isOpen || !containerRef.current) return
@@ -348,6 +351,83 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     window.Jmol.script(appletRef.current, `write "${filename}" as pngj`)
   }
 
+  // Submit current view as PNGJ to the server by intercepting the blob creation
+  const handleSubmitPngj = async () => {
+    if (!appletRef.current || !window.Jmol || !templateId || !onSubmit) return
+
+    setIsSubmitting(true)
+
+    try {
+      // Capture the blob by intercepting URL.createObjectURL
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        const originalCreateObjectURL = URL.createObjectURL
+        let captured = false
+        const timeoutId = setTimeout(() => {
+          URL.createObjectURL = originalCreateObjectURL
+          if (!captured) {
+            reject(new Error('Timeout waiting for PNGJ data from JSmol'))
+          }
+        }, 5000)
+
+        // Intercept URL.createObjectURL to capture the blob
+        URL.createObjectURL = function(obj: Blob | MediaSource): string {
+          // Restore original immediately after first call
+          URL.createObjectURL = originalCreateObjectURL
+          clearTimeout(timeoutId)
+
+          if (obj instanceof Blob) {
+            console.log('Captured blob from JSmol:', obj.size, 'bytes, type:', obj.type)
+            captured = true
+            resolve(obj)
+            // Return a dummy URL since we don't want the download to proceed
+            // But we need to return something valid to not break JSmol
+            return 'blob:captured'
+          }
+
+          // For non-Blob objects, use original behavior
+          return originalCreateObjectURL.call(URL, obj)
+        }
+
+        // Also intercept anchor clicks to prevent the download dialog
+        const originalClick = HTMLAnchorElement.prototype.click
+        HTMLAnchorElement.prototype.click = function(this: HTMLAnchorElement) {
+          if (this.href === 'blob:captured') {
+            // This is our captured blob, don't trigger download
+            console.log('Blocked download of captured blob')
+            HTMLAnchorElement.prototype.click = originalClick
+            return
+          }
+          originalClick.call(this)
+        }
+
+        // Trigger JSmol to write the PNGJ
+        const filename = `export_${Date.now()}.png`
+        console.log('Triggering JSmol write command for submission...')
+        window.Jmol.script(appletRef.current!, `write "${filename}" as pngj`)
+      })
+
+      console.log('Got PNGJ blob:', blob.size, 'bytes')
+
+      // Create File from Blob
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')
+      const safeName = modelName.replace(/[^a-zA-Z0-9]/g, '_')
+      const filename = `${safeName}_${timestamp}.png`
+      const file = new File([blob], filename, { type: 'image/png' })
+
+      console.log('Created file:', filename, 'size:', file.size)
+
+      // Call the onSubmit callback
+      await onSubmit(templateId, file)
+
+      alert('Model submitted successfully!')
+    } catch (err) {
+      console.error('Error submitting PNGJ:', err)
+      alert(err instanceof Error ? err.message : 'Failed to submit model')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   if (!isOpen) return null
 
   return (
@@ -535,6 +615,26 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
                     Download current view as a PNGJ file to re-upload.
                   </p>
                 </div>
+
+                {/* Submit to Server */}
+                {templateId && onSubmit && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Submit Model</label>
+                    <button
+                      onClick={handleSubmitPngj}
+                      disabled={isSubmitting}
+                      className="w-full px-3 py-2 bg-green-600 text-white rounded text-sm font-medium hover:bg-green-700 disabled:bg-gray-400 flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                      </svg>
+                      {isSubmitting ? 'Submitting...' : 'Submit'}
+                    </button>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Submit current view directly to replace your model.
+                    </p>
+                  </div>
+                )}
 
                 {/* Load from PDB */}
                 {proteinPdbId && (
