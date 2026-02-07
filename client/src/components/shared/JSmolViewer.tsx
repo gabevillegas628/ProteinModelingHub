@@ -378,22 +378,47 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
       HTMLAnchorElement.prototype.click = function(this: HTMLAnchorElement) {
         console.log('Anchor click intercepted:', {
-          href: this.href,
+          hrefStart: this.href?.substring(0, 50),
           download: this.download,
           tagName: this.tagName
         })
 
-        if (this.download && this.href && this.href.startsWith('blob:') && !captured) {
-          console.log('Found PNGJ blob URL:', this.href)
+        // Check for data URL (base64 encoded) - this is what JSmol uses
+        if (this.download && this.href && this.href.startsWith('data:image/png;base64,') && !captured) {
+          console.log('Found PNGJ data URL, length:', this.href.length)
 
-          // Fetch the blob
+          // Convert data URL to Blob
           fetch(this.href)
             .then(response => {
               console.log('Fetch response status:', response.status)
               return response.blob()
             })
             .then(fetchedBlob => {
-              console.log('Successfully fetched blob:', fetchedBlob.size, 'bytes, type:', fetchedBlob.type)
+              console.log('Successfully converted data URL to blob:', fetchedBlob.size, 'bytes, type:', fetchedBlob.type)
+              captured = true
+              clearTimeout(timeoutId)
+              HTMLAnchorElement.prototype.click = originalClick
+              resolveBlob(fetchedBlob)
+            })
+            .catch(err => {
+              console.error('Failed to convert data URL to blob:', err)
+              HTMLAnchorElement.prototype.click = originalClick
+              rejectBlob(err)
+            })
+
+          // DON'T call originalClick - prevent the download since we captured the data
+          // This should also prevent the JSmol error
+          return
+        }
+
+        // Also check for blob URLs as fallback
+        if (this.download && this.href && this.href.startsWith('blob:') && !captured) {
+          console.log('Found PNGJ blob URL:', this.href)
+
+          fetch(this.href)
+            .then(response => response.blob())
+            .then(fetchedBlob => {
+              console.log('Successfully fetched blob:', fetchedBlob.size, 'bytes')
               captured = true
               clearTimeout(timeoutId)
               HTMLAnchorElement.prototype.click = originalClick
@@ -405,8 +430,6 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
               rejectBlob(err)
             })
 
-          // Let the download proceed normally so JSmol doesn't error
-          originalClick.call(this)
           return
         }
 
