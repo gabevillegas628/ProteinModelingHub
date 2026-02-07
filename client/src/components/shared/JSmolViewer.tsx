@@ -66,6 +66,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   const [historyIndex, setHistoryIndex] = useState(-1)
   const [consoleLog, setConsoleLog] = useState<Array<{ type: 'command' | 'output' | 'error', text: string }>>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [submitProgress, setSubmitProgress] = useState({ percent: 0, status: '' })
 
   useEffect(() => {
     if (!isOpen || !containerRef.current) return
@@ -351,13 +352,40 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     window.Jmol.script(appletRef.current, `write "${filename}" as pngj`)
   }
 
+  // Helper to animate progress with variable speed
+  const animateProgress = (from: number, to: number, duration: number): Promise<void> => {
+    return new Promise((resolve) => {
+      const startTime = Date.now()
+      const animate = () => {
+        const elapsed = Date.now() - startTime
+        const progress = Math.min(elapsed / duration, 1)
+        // Ease out cubic for natural feel
+        const eased = 1 - Math.pow(1 - progress, 3)
+        const current = from + (to - from) * eased
+        setSubmitProgress(prev => ({ ...prev, percent: Math.round(current) }))
+
+        if (progress < 1) {
+          requestAnimationFrame(animate)
+        } else {
+          resolve()
+        }
+      }
+      animate()
+    })
+  }
+
   // Submit current view as PNGJ to the server by intercepting the download
   const handleSubmitPngj = async () => {
     if (!appletRef.current || !window.Jmol || !templateId || !onSubmit) return
 
     setIsSubmitting(true)
+    setSubmitProgress({ percent: 0, status: 'Preparing export...' })
 
     try {
+      // Animate initial progress
+      await animateProgress(0, 15, 300 + Math.random() * 200)
+      setSubmitProgress(prev => ({ ...prev, status: 'Generating PNGJ image...' }))
+
       // Set up interception BEFORE triggering the write
       const originalClick = HTMLAnchorElement.prototype.click
       let captured = false
@@ -465,9 +493,13 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
       // Wait for the blob to be captured
       console.log('Waiting for blob capture...')
-      const blob = await blobPromise
+      await animateProgress(15, 35, 400 + Math.random() * 300)
 
+      const blob = await blobPromise
       console.log('Got PNGJ blob:', blob.size, 'bytes')
+
+      setSubmitProgress(prev => ({ ...prev, status: 'Processing image data...' }))
+      await animateProgress(35, 55, 300 + Math.random() * 200)
 
       // Create File from Blob
       const timestamp = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')
@@ -477,10 +509,17 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
       console.log('Created file:', filename2, 'size:', file.size)
 
+      setSubmitProgress(prev => ({ ...prev, status: 'Uploading to server...' }))
+      await animateProgress(55, 85, 500 + Math.random() * 400)
+
       // Call the onSubmit callback
       await onSubmit(templateId, file)
 
-      alert('Model submitted successfully!')
+      setSubmitProgress(prev => ({ ...prev, status: 'Finalizing...' }))
+      await animateProgress(85, 100, 200 + Math.random() * 100)
+
+      setSubmitProgress({ percent: 100, status: 'Complete!' })
+      await new Promise(resolve => setTimeout(resolve, 300))
     } catch (err) {
       console.error('Error submitting PNGJ:', err)
       alert(err instanceof Error ? err.message : 'Failed to submit model')
@@ -761,6 +800,41 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
             </div>
           </form>
         </div>
+
+        {/* Submit Progress Modal */}
+        {isSubmitting && (
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-20">
+            <div className="bg-white rounded-lg shadow-2xl p-6 w-80">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="relative">
+                  <svg className="w-8 h-8 text-green-500 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                  </svg>
+                </div>
+                <div>
+                  <h4 className="font-semibold text-gray-800">Submitting Model</h4>
+                  <p className="text-sm text-gray-500">{submitProgress.status}</p>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="relative h-3 bg-gray-200 rounded-full overflow-hidden">
+                <div
+                  className="absolute inset-y-0 left-0 bg-green-500 rounded-full transition-all duration-150 ease-out"
+                  style={{ width: `${submitProgress.percent}%` }}
+                >
+                  {/* Animated pulse overlay for visual interest */}
+                  <div className="absolute inset-0 bg-green-400 animate-pulse opacity-50 rounded-full" />
+                </div>
+              </div>
+
+              <div className="mt-2 flex justify-between text-xs text-gray-500">
+                <span>{submitProgress.percent}%</span>
+                <span>{submitProgress.percent < 100 ? 'Please wait...' : 'Done!'}</span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
