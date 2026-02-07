@@ -123,7 +123,6 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
               `
 
               // Load the PNGJ file - URL now has .png extension for JSmol file type detection
-              console.log('Loading PNGJ file with JSmol:', fileUrl)
               window.Jmol.script(appletRef.current!, `
                 ${baseSettings}
                 load "${fileUrl}";
@@ -348,8 +347,6 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     const safeName = modelName.replace(/[^a-zA-Z0-9]/g, '_')
     const filename = `${safeName}_${timestamp}.png`
 
-    // Use JSmol's native write command to create and download PNGJ
-    console.log('Exporting PNGJ:', filename)
     window.Jmol.script(appletRef.current, `write "${filename}" as pngj`)
   }
 
@@ -406,31 +403,18 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
       }, 5000)
 
       HTMLAnchorElement.prototype.click = function(this: HTMLAnchorElement) {
-        console.log('Anchor click intercepted:', {
-          hrefStart: this.href?.substring(0, 50),
-          download: this.download,
-          tagName: this.tagName
-        })
-
         // Check for data URL (base64 encoded) - this is what JSmol uses
         if (this.download && this.href && this.href.startsWith('data:image/png;base64,') && !captured) {
-          console.log('Found PNGJ data URL, length:', this.href.length)
-
           // Convert data URL to Blob
           fetch(this.href)
-            .then(response => {
-              console.log('Fetch response status:', response.status)
-              return response.blob()
-            })
+            .then(response => response.blob())
             .then(fetchedBlob => {
-              console.log('Successfully converted data URL to blob:', fetchedBlob.size, 'bytes, type:', fetchedBlob.type)
               captured = true
               clearTimeout(timeoutId)
               HTMLAnchorElement.prototype.click = originalClick
               resolveBlob(fetchedBlob)
             })
             .catch(err => {
-              console.error('Failed to convert data URL to blob:', err)
               HTMLAnchorElement.prototype.click = originalClick
               rejectBlob(err)
             })
@@ -442,19 +426,15 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
         // Also check for blob URLs as fallback
         if (this.download && this.href && this.href.startsWith('blob:') && !captured) {
-          console.log('Found PNGJ blob URL:', this.href)
-
           fetch(this.href)
             .then(response => response.blob())
             .then(fetchedBlob => {
-              console.log('Successfully fetched blob:', fetchedBlob.size, 'bytes')
               captured = true
               clearTimeout(timeoutId)
               HTMLAnchorElement.prototype.click = originalClick
               resolveBlob(fetchedBlob)
             })
             .catch(err => {
-              console.error('Failed to fetch blob:', err)
               HTMLAnchorElement.prototype.click = originalClick
               rejectBlob(err)
             })
@@ -467,21 +447,16 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
       // Trigger JSmol to write the PNGJ
       const filename = `export_${Date.now()}.png`
-      console.log('About to call JSmol write command...')
 
       // Intercept window.prompt to auto-respond to JSmol's filename dialog
       const originalPrompt = window.prompt
-      window.prompt = (message?: string) => {
-        console.log('Intercepted prompt:', message)
-        // Return the filename to auto-confirm the dialog
+      window.prompt = () => {
         return filename
       }
 
       try {
         window.Jmol.script(appletRef.current!, `write "${filename}" as pngj`)
-        console.log('JSmol write command executed')
       } catch (scriptErr) {
-        console.error('JSmol script error:', scriptErr)
         HTMLAnchorElement.prototype.click = originalClick
         window.prompt = originalPrompt
         throw scriptErr
@@ -492,12 +467,9 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
         }, 100)
       }
 
-      // Wait for the blob to be captured
-      console.log('Waiting for blob capture...')
       await animateProgress(15, 35, 400 + Math.random() * 300)
 
       const blob = await blobPromise
-      console.log('Got PNGJ blob:', blob.size, 'bytes')
 
       setSubmitProgress(prev => ({ ...prev, status: 'Processing image data...' }))
       await animateProgress(35, 55, 300 + Math.random() * 200)
@@ -507,8 +479,6 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
       const safeName = modelName.replace(/[^a-zA-Z0-9]/g, '_')
       const filename2 = `${safeName}_${timestamp}.png`
       const file = new File([blob], filename2, { type: 'image/png' })
-
-      console.log('Created file:', filename2, 'size:', file.size)
 
       setSubmitProgress(prev => ({ ...prev, status: 'Uploading to server...' }))
       await animateProgress(55, 85, 500 + Math.random() * 400)
@@ -522,7 +492,6 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
       setSubmitProgress({ percent: 100, status: 'Complete!' })
       await new Promise(resolve => setTimeout(resolve, 300))
     } catch (err) {
-      console.error('Error submitting PNGJ:', err)
       alert(err instanceof Error ? err.message : 'Failed to submit model')
     } finally {
       setIsSubmitting(false)

@@ -9,7 +9,7 @@ import { sendPasswordResetEmail } from '../services/emailService.js';
 const router = Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-me';
-const JWT_EXPIRES_IN = (process.env.JWT_EXPIRES_IN || '7d') as SignOptions['expiresIn'];
+const JWT_EXPIRES_IN = (process.env.JWT_EXPIRES_IN || '6h') as SignOptions['expiresIn'];
 const PASSWORD_RESET_EXPIRES_HOURS = 1; // Reset token expires in 1 hour
 
 interface RegisterBody {
