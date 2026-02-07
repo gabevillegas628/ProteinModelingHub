@@ -803,7 +803,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
         {/* Submit Progress Modal */}
         {isSubmitting && (
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-20">
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100]">
             <div className="bg-white rounded-lg shadow-2xl p-6 w-80">
               <div className="flex items-center gap-3 mb-4">
                 <div className="relative">
