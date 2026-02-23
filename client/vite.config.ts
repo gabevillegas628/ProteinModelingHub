@@ -14,6 +14,11 @@ export default defineConfig({
       '/modeling/api': {
         target: 'http://localhost:3001',
         changeOrigin: true
+      },
+      '/modeling/socket.io': {
+        target: 'http://localhost:3001',
+        ws: true,
+        changeOrigin: true
       }
     }
   }

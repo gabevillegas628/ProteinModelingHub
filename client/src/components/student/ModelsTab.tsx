@@ -590,6 +590,7 @@ export default function ModelsTab() {
         proteinPdbId={viewer.proteinPdbId}
         templateId={viewer.templateId}
         onSubmit={handleViewerSubmit}
+        groupId={data?.group.id}
       />
 
       {/* Discussion Modal */}

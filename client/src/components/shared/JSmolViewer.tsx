@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
+import { io } from 'socket.io-client'
 
 // Declare Jmol as a global variable (loaded from local files)
 declare global {
@@ -43,12 +44,13 @@ interface JSmolViewerProps {
   proteinPdbId?: string;
   templateId?: string;
   onSubmit?: (templateId: string, file: File) => Promise<void>;
+  groupId?: string;
 }
 
 type DisplayStyle = 'cartoon' | 'ribbon' | 'trace' | 'wireframe' | 'spacefill' | 'ball+stick';
 type ColorScheme = 'structure' | 'chain' | 'cpk' | 'amino' | 'temperature' | 'group';
 
-export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, proteinPdbId, templateId, onSubmit }: JSmolViewerProps) {
+export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, proteinPdbId, templateId, onSubmit, groupId }: JSmolViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const consoleRef = useRef<HTMLDivElement>(null)
   const appletRef = useRef<JmolApplet | null>(null)
@@ -68,6 +70,58 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   const [consoleLog, setConsoleLog] = useState<Array<{ type: 'command' | 'output' | 'error', text: string }>>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitProgress, setSubmitProgress] = useState({ percent: 0, status: '' })
+
+  // Collaborative sync state
+  const socketRef = useRef<ReturnType<typeof io> | null>(null)
+  const isApplyingRemoteRef = useRef(false)
+  const lastEmittedStateRef = useRef<string>('')
+  const [syncEnabled, setSyncEnabled] = useState(true)
+  const syncEnabledRef = useRef(true)
+
+  // Keep syncEnabledRef in sync with state
+  useEffect(() => {
+    syncEnabledRef.current = syncEnabled
+  }, [syncEnabled])
+
+  // Connect socket and join group room when viewer opens
+  useEffect(() => {
+    if (!isOpen || !groupId) return
+
+    const socket = io({ path: '/modeling/socket.io/' })
+    socketRef.current = socket
+    socket.emit('join-group', groupId)
+
+    socket.on('viewer-state', (state: string) => {
+      if (!syncEnabledRef.current || !appletRef.current || !window.Jmol) return
+      isApplyingRemoteRef.current = true
+      window.Jmol.script(appletRef.current, state)
+      setTimeout(() => {
+        isApplyingRemoteRef.current = false
+      }, 100)
+    })
+
+    return () => {
+      socket.emit('leave-group', groupId)
+      socket.disconnect()
+      socketRef.current = null
+    }
+  }, [isOpen, groupId])
+
+  // Poll Jmol state and emit to group when it changes
+  useEffect(() => {
+    if (!isOpen || !groupId || !syncEnabled) return
+
+    const interval = setInterval(() => {
+      if (isApplyingRemoteRef.current || !appletRef.current || !window.Jmol || !socketRef.current) return
+      const state = window.Jmol.getPropertyAsString(appletRef.current, 'stateInfo')
+      if (state && state !== lastEmittedStateRef.current) {
+        lastEmittedStateRef.current = state
+        socketRef.current.emit('viewer-state', { groupId, state })
+      }
+    }, 250)
+
+    return () => clearInterval(interval)
+  }, [isOpen, groupId, syncEnabled])
 
   useEffect(() => {
     if (!isOpen || !containerRef.current) return
@@ -511,6 +565,20 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
             <p className="text-sm text-gray-500">3D Molecular Viewer {proteinPdbId && `• ${proteinPdbId}`}</p>
           </div>
           <div className="flex items-center gap-2">
+            {groupId && (
+              <button
+                onClick={() => setSyncEnabled(!syncEnabled)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                  syncEnabled
+                    ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                }`}
+                title={syncEnabled ? 'View sync ON — your group sees this view' : 'View sync OFF — click to share your view'}
+              >
+                <span className={`w-2 h-2 rounded-full ${syncEnabled ? 'bg-green-500' : 'bg-gray-400'}`} />
+                {syncEnabled ? 'Synced' : 'Sync Off'}
+              </button>
+            )}
             <button
               onClick={() => setShowControls(!showControls)}
               className="text-gray-500 hover:text-gray-700 p-2"

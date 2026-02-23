@@ -12,6 +12,7 @@ export default function ChatTab() {
   const [loading, setLoading] = useState(true)
   const [messagesLoading, setMessagesLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showVideo, setShowVideo] = useState(false)
 
   useEffect(() => {
     loadGroup()
@@ -86,12 +87,40 @@ export default function ChatTab() {
   return (
     <div className="bg-white rounded-lg shadow flex flex-col" style={{ height: 'calc(100vh - 280px)', minHeight: '400px' }}>
       {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-200 shrink-0">
-        <h2 className="text-lg font-semibold text-gray-800">Group Chat</h2>
-        <p className="text-sm text-gray-500">
-          {group.name} - {group.proteinName} ({group.proteinPdbId})
-        </p>
+      <div className="px-6 py-4 border-b border-gray-200 shrink-0 flex items-center justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-800">Group Chat</h2>
+          <p className="text-sm text-gray-500">
+            {group.name} - {group.proteinName} ({group.proteinPdbId})
+          </p>
+        </div>
+        <button
+          onClick={() => setShowVideo(!showVideo)}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            showVideo
+              ? 'bg-red-100 text-red-700 hover:bg-red-200'
+              : 'bg-blue-600 text-white hover:bg-blue-700'
+          }`}
+          title={showVideo ? 'Hide video call' : 'Start a video call with your group'}
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+          </svg>
+          {showVideo ? 'End Call' : 'Video Call'}
+        </button>
       </div>
+
+      {/* Jitsi Video Call */}
+      {showVideo && (
+        <div className="border-b border-gray-200 shrink-0" style={{ height: '420px' }}>
+          <iframe
+            src={`https://meet.jit.si/proteinmodeling-group-${group.id}`}
+            allow="camera; microphone; fullscreen; display-capture; autoplay"
+            style={{ width: '100%', height: '100%', border: 'none' }}
+            title="Group Video Call"
+          />
+        </div>
+      )}
 
       {/* Chat Area */}
       <div className="flex-1 p-6 overflow-hidden">
