@@ -5,6 +5,7 @@ interface VideoCallContextValue {
   activeCall: VideoTokenResponse | null
   callLoading: boolean
   callError: string
+  isFirefox: boolean
   startCall: (groupId: string) => Promise<void>
   endCall: () => void
 }
@@ -15,6 +16,8 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
   const [activeCall, setActiveCall] = useState<VideoTokenResponse | null>(null)
   const [callLoading, setCallLoading] = useState(false)
   const [callError, setCallError] = useState('')
+
+  const isFirefox = navigator.userAgent.toLowerCase().includes('firefox')
 
   const startCall = async (groupId: string) => {
     if (callLoading || activeCall) return
@@ -36,7 +39,7 @@ export function VideoCallProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <VideoCallContext.Provider value={{ activeCall, callLoading, callError, startCall, endCall }}>
+    <VideoCallContext.Provider value={{ activeCall, callLoading, callError, isFirefox, startCall, endCall }}>
       {children}
     </VideoCallContext.Provider>
   )

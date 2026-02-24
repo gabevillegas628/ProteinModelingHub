@@ -31,6 +31,7 @@ export default function FloatingVideoCall() {
 
   const activeCall = videoCall?.activeCall ?? null
   const endCall = videoCall?.endCall
+  const isFirefox = videoCall?.isFirefox ?? false
 
   useEffect(() => {
     if (!activeCall || !containerRef.current) return
@@ -109,6 +110,16 @@ export default function FloatingVideoCall() {
           </button>
         </div>
       </div>
+
+      {/* Firefox audio warning */}
+      {isFirefox && !minimized && (
+        <div className="bg-amber-600 px-3 py-1.5 text-xs text-white flex items-center gap-2">
+          <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+          Firefox has a known audio bug with embedded calls — use Chrome or Edge for audio.
+        </div>
+      )}
 
       {/* JaaS container — kept in DOM when minimized so the call stays alive */}
       <div style={{ height: minimized ? 0 : CALL_HEIGHT, overflow: 'hidden' }}>
