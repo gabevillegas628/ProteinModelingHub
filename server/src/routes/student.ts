@@ -716,10 +716,10 @@ router.get('/video-token', async (req: AuthRequest, res: Response) => {
     // Verify the requesting user belongs to this group
     const user = await prisma.user.findUnique({
       where: { id: req.user!.userId },
-      include: { group: true }
+      include: { groupMemberships: true }
     });
 
-    if (!user?.group || user.group.id !== groupId) {
+    if (!user?.groupMemberships.some(m => m.groupId === groupId)) {
       return res.status(403).json({ error: 'You are not a member of this group' });
     }
 
@@ -736,7 +736,7 @@ router.get('/video-token', async (req: AuthRequest, res: Response) => {
       context: {
         user: {
           id: user.id,
-          name: user.name,
+          name: `${user.firstName} ${user.lastName}`,
           email: user.email,
           moderator: true
         }
