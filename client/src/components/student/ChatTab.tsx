@@ -13,6 +13,9 @@ export default function ChatTab() {
   const [messagesLoading, setMessagesLoading] = useState(false)
   const [error, setError] = useState('')
   const [showVideo, setShowVideo] = useState(false)
+  const [videoToken, setVideoToken] = useState<studentApi.VideoTokenResponse | null>(null)
+  const [videoTokenLoading, setVideoTokenLoading] = useState(false)
+  const [videoError, setVideoError] = useState('')
 
   useEffect(() => {
     loadGroup()
@@ -59,6 +62,27 @@ export default function ChatTab() {
     await loadMessages()
   }
 
+  const handleVideoToggle = async () => {
+    if (showVideo) {
+      setShowVideo(false)
+      setVideoToken(null)
+      setVideoError('')
+      return
+    }
+    if (!group) return
+    try {
+      setVideoTokenLoading(true)
+      setVideoError('')
+      const tokenData = await studentApi.getVideoToken(group.id)
+      setVideoToken(tokenData)
+      setShowVideo(true)
+    } catch (err) {
+      setVideoError(err instanceof Error ? err.message : 'Failed to start video call')
+    } finally {
+      setVideoTokenLoading(false)
+    }
+  }
+
   const markAsRead = async (lastReadAt: string) => {
     if (!group) return
     try {
@@ -95,8 +119,9 @@ export default function ChatTab() {
           </p>
         </div>
         <button
-          onClick={() => setShowVideo(!showVideo)}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+          onClick={handleVideoToggle}
+          disabled={videoTokenLoading}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-60 ${
             showVideo
               ? 'bg-red-100 text-red-700 hover:bg-red-200'
               : 'bg-blue-600 text-white hover:bg-blue-700'
@@ -106,15 +131,18 @@ export default function ChatTab() {
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
           </svg>
-          {showVideo ? 'End Call' : 'Video Call'}
+          {videoTokenLoading ? 'Connecting...' : showVideo ? 'End Call' : 'Video Call'}
         </button>
       </div>
 
-      {/* Jitsi Video Call */}
-      {showVideo && (
+      {/* JaaS Video Call */}
+      {videoError && (
+        <div className="px-6 py-2 bg-red-50 text-red-600 text-sm shrink-0">{videoError}</div>
+      )}
+      {showVideo && videoToken && (
         <div className="border-b border-gray-200 shrink-0" style={{ height: '420px' }}>
           <iframe
-            src={`https://meet.jit.si/proteinmodeling-group-${group.id}`}
+            src={`https://8x8.vc/${videoToken.appId}/${videoToken.roomName}?jwt=${videoToken.token}`}
             allow="camera; microphone; fullscreen; display-capture; autoplay"
             style={{ width: '100%', height: '100%', border: 'none' }}
             title="Group Video Call"

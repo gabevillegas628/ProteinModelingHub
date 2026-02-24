@@ -188,3 +188,13 @@ export function getReviewStatus(): Promise<ReviewStatus> {
 export function requestReview(): Promise<ReviewRequestResponse> {
   return request('/request-review', { method: 'POST' });
 }
+
+export interface VideoTokenResponse {
+  token: string;
+  roomName: string;
+  appId: string;
+}
+
+export function getVideoToken(groupId: string): Promise<VideoTokenResponse> {
+  return request(`/video-token?groupId=${encodeURIComponent(groupId)}`);
+}

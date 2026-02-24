@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import jwt from 'jsonwebtoken';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 import { sendReviewRequestEmail } from '../services/emailService.js';
@@ -692,6 +693,65 @@ router.get('/review-status', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Error getting review status:', error);
     res.status(500).json({ error: 'Failed to get review status' });
+  }
+});
+
+// Generate a JaaS (Jitsi as a Service) JWT for the group video call
+router.get('/video-token', async (req: AuthRequest, res: Response) => {
+  try {
+    const { groupId } = req.query;
+
+    if (!groupId || typeof groupId !== 'string') {
+      return res.status(400).json({ error: 'groupId is required' });
+    }
+
+    const appId = process.env.JAAS_APP_ID;
+    const apiKeyId = process.env.JAAS_API_KEY_ID;
+    const privateKey = process.env.JAAS_PRIVATE_KEY;
+
+    if (!appId || !apiKeyId || !privateKey) {
+      return res.status(500).json({ error: 'Video chat is not configured on this server' });
+    }
+
+    // Verify the requesting user belongs to this group
+    const user = await prisma.user.findUnique({
+      where: { id: req.user!.userId },
+      include: { group: true }
+    });
+
+    if (!user?.group || user.group.id !== groupId) {
+      return res.status(403).json({ error: 'You are not a member of this group' });
+    }
+
+    const roomName = `group-${groupId}`;
+    const now = Math.floor(Date.now() / 1000);
+
+    const payload = {
+      aud: 'jitsi',
+      iss: 'chat',
+      iat: now,
+      exp: now + 3600,
+      sub: appId,
+      room: roomName,
+      context: {
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email,
+          moderator: true
+        }
+      }
+    };
+
+    const token = jwt.sign(payload, privateKey, {
+      algorithm: 'RS256',
+      header: { alg: 'RS256', kid: apiKeyId, typ: 'JWT' }
+    } as jwt.SignOptions);
+
+    res.json({ token, roomName, appId });
+  } catch (error) {
+    console.error('Error generating video token:', error);
+    res.status(500).json({ error: 'Failed to generate video token' });
   }
 });
 
