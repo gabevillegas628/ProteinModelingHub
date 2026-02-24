@@ -2,6 +2,10 @@ import { useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useVideoCall } from '../../context/VideoCallContext'
 
+// JaaS needs at least ~400px height to render its prejoin screen properly
+const IFRAME_HEIGHT = 420
+const PANEL_WIDTH = 480
+
 export default function FloatingVideoCall() {
   const videoCall = useVideoCall()
   const [minimized, setMinimized] = useState(false)
@@ -13,10 +17,8 @@ export default function FloatingVideoCall() {
 
   return createPortal(
     <div
-      className={`fixed bottom-4 right-4 shadow-2xl rounded-lg overflow-hidden bg-gray-900 border border-gray-700 transition-all duration-200 ${
-        minimized ? 'w-52' : 'w-80'
-      }`}
-      style={{ zIndex: 300 }}
+      className="fixed bottom-4 right-4 shadow-2xl rounded-lg overflow-hidden bg-gray-900 border border-gray-700"
+      style={{ zIndex: 300, width: minimized ? 220 : PANEL_WIDTH }}
     >
       {/* Header bar */}
       <div className="flex items-center justify-between px-3 py-2 bg-gray-800">
@@ -31,12 +33,10 @@ export default function FloatingVideoCall() {
             title={minimized ? 'Expand' : 'Minimize'}
           >
             {minimized ? (
-              // Expand icon
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
               </svg>
             ) : (
-              // Minimize icon
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
               </svg>
@@ -55,11 +55,11 @@ export default function FloatingVideoCall() {
       </div>
 
       {/* iframe — hidden when minimized but NOT unmounted so the call stays connected */}
-      <div style={{ height: minimized ? 0 : '240px', overflow: 'hidden' }}>
+      <div style={{ height: minimized ? 0 : IFRAME_HEIGHT, overflow: 'hidden' }}>
         <iframe
           src={src}
           allow="camera; microphone; fullscreen; display-capture; autoplay"
-          style={{ width: '100%', height: '240px', border: 'none', display: 'block' }}
+          style={{ width: '100%', height: IFRAME_HEIGHT, border: 'none', display: 'block' }}
           title="Group Video Call"
         />
       </div>
