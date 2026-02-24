@@ -1,24 +1,80 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useVideoCall } from '../../context/VideoCallContext'
 
-// JaaS needs at least ~400px height to render its prejoin screen properly
-const IFRAME_HEIGHT = 420
-const PANEL_WIDTH = 480
+// Minimal type for the JitsiMeetExternalAPI instance
+interface JaaSApiInstance {
+  dispose: () => void
+}
+
+declare global {
+  interface Window {
+    JitsiMeetExternalAPI: new (domain: string, options: {
+      roomName: string
+      parentNode: Element
+      jwt: string
+      width: number | string
+      height: number | string
+      configOverwrite?: Record<string, unknown>
+    }) => JaaSApiInstance
+  }
+}
+
+const CALL_HEIGHT = 420
+const CALL_WIDTH = 480
 
 export default function FloatingVideoCall() {
   const videoCall = useVideoCall()
   const [minimized, setMinimized] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const apiRef = useRef<JaaSApiInstance | null>(null)
 
-  if (!videoCall?.activeCall) return null
+  const activeCall = videoCall?.activeCall ?? null
+  const endCall = videoCall?.endCall
 
-  const { activeCall, endCall } = videoCall
-  const src = `https://8x8.vc/${activeCall.appId}/${activeCall.roomName}?jwt=${activeCall.token}`
+  useEffect(() => {
+    if (!activeCall || !containerRef.current) return
+
+    // JaaS roomName for the External API must include the appId prefix
+    const fullRoomName = `${activeCall.appId}/${activeCall.roomName}`
+
+    const initApi = () => {
+      if (!containerRef.current || apiRef.current) return
+      apiRef.current = new window.JitsiMeetExternalAPI('8x8.vc', {
+        roomName: fullRoomName,
+        parentNode: containerRef.current,
+        jwt: activeCall.token,
+        width: '100%',
+        height: CALL_HEIGHT,
+        configOverwrite: {
+          startWithAudioMuted: false,
+          startWithVideoMuted: false,
+        },
+      })
+    }
+
+    if (window.JitsiMeetExternalAPI) {
+      initApi()
+    } else {
+      // Load the External API script for this JaaS app, then init
+      const script = document.createElement('script')
+      script.src = `https://8x8.vc/${activeCall.appId}/external_api.js`
+      script.onload = initApi
+      document.head.appendChild(script)
+    }
+
+    return () => {
+      apiRef.current?.dispose()
+      apiRef.current = null
+    }
+  }, [activeCall])
+
+  if (!activeCall) return null
 
   return createPortal(
     <div
       className="fixed bottom-4 right-4 shadow-2xl rounded-lg overflow-hidden bg-gray-900 border border-gray-700"
-      style={{ zIndex: 300, width: minimized ? 220 : PANEL_WIDTH }}
+      style={{ zIndex: 300, width: CALL_WIDTH }}
     >
       {/* Header bar */}
       <div className="flex items-center justify-between px-3 py-2 bg-gray-800">
@@ -54,14 +110,9 @@ export default function FloatingVideoCall() {
         </div>
       </div>
 
-      {/* iframe — hidden when minimized but NOT unmounted so the call stays connected */}
-      <div style={{ height: minimized ? 0 : IFRAME_HEIGHT, overflow: 'hidden' }}>
-        <iframe
-          src={src}
-          allow="camera; microphone; fullscreen; display-capture; autoplay"
-          style={{ width: '100%', height: IFRAME_HEIGHT, border: 'none', display: 'block' }}
-          title="Group Video Call"
-        />
+      {/* JaaS container — kept in DOM when minimized so the call stays alive */}
+      <div style={{ height: minimized ? 0 : CALL_HEIGHT, overflow: 'hidden' }}>
+        <div ref={containerRef} style={{ width: '100%', height: CALL_HEIGHT }} />
       </div>
     </div>,
     document.body
