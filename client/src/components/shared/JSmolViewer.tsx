@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { io } from 'socket.io-client'
+import { useVideoCall } from '../../context/VideoCallContext'
 
 // Declare Jmol as a global variable (loaded from local files)
 declare global {
@@ -51,6 +52,7 @@ type DisplayStyle = 'cartoon' | 'ribbon' | 'trace' | 'wireframe' | 'spacefill' |
 type ColorScheme = 'structure' | 'chain' | 'cpk' | 'amino' | 'temperature' | 'group';
 
 export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, proteinPdbId, templateId, onSubmit, groupId }: JSmolViewerProps) {
+  const videoCall = useVideoCall()
   const containerRef = useRef<HTMLDivElement>(null)
   const consoleRef = useRef<HTMLDivElement>(null)
   const appletRef = useRef<JmolApplet | null>(null)
@@ -565,6 +567,23 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
             <p className="text-sm text-gray-500">3D Molecular Viewer {proteinPdbId && `• ${proteinPdbId}`}</p>
           </div>
           <div className="flex items-center gap-2">
+            {groupId && videoCall && (
+              <button
+                onClick={() => videoCall.activeCall ? videoCall.endCall() : videoCall.startCall(groupId)}
+                disabled={videoCall.callLoading}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-colors disabled:opacity-60 ${
+                  videoCall.activeCall
+                    ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                    : 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                }`}
+                title={videoCall.activeCall ? 'End video call' : 'Start a video call with your group'}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                {videoCall.callLoading ? '...' : videoCall.activeCall ? 'In Call' : 'Call'}
+              </button>
+            )}
             {groupId && (
               <button
                 onClick={() => setSyncEnabled(!syncEnabled)}
