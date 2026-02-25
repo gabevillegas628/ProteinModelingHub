@@ -51,6 +51,17 @@ interface JSmolViewerProps {
 type DisplayStyle = 'cartoon' | 'ribbon' | 'trace' | 'wireframe' | 'spacefill' | 'ball+stick';
 type ColorScheme = 'structure' | 'chain' | 'cpk' | 'amino' | 'temperature' | 'group';
 
+// Strip Jmol 'load ...' lines from a stateInfo script before broadcasting or applying it.
+// Jmol's stateInfo always includes the original load command; if a receiver re-runs it,
+// Jmol fires a fresh XHR for the file which blanks the viewport while it re-fetches.
+// The receiver already has the model in memory, so the load line is safe to drop.
+function stripLoadCommands(state: string): string {
+  return state
+    .split('\n')
+    .filter(line => !line.trim().toLowerCase().startsWith('load '))
+    .join('\n')
+}
+
 export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, proteinPdbId, templateId, onSubmit, groupId }: JSmolViewerProps) {
   const videoCall = useVideoCall()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -86,6 +97,11 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   // True once Jmol has a model loaded and is ready to emit/receive sync state.
   // Prevents broadcasting a blank canvas during applet initialisation (Bug 2).
   const modelLoadedRef = useRef(false)
+  // Passive-period refs: new joiners don't emit for 3s (or until they receive initial
+  // sync from a peer), preventing their fresh default state from clobbering existing
+  // users' orientation/colour changes before the peer-joined re-emit arrives.
+  const joinedAtRef = useRef(0)
+  const hasReceivedInitialSyncRef = useRef(false)
   const [syncEnabled, setSyncEnabled] = useState(true)
   const syncEnabledRef = useRef(true)
 
@@ -103,6 +119,10 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     // Include the file path (without auth token query params) in the room key so each
     // distinct model gets its own sync channel within the group.
     const syncRoomId = `${groupId}::${fileUrl.split('?')[0]}`
+
+    // Reset passive-period state on every (re-)connect.
+    joinedAtRef.current = Date.now()
+    hasReceivedInitialSyncRef.current = false
 
     const socket = io({ path: '/modeling/socket.io/' })
     socketRef.current = socket
@@ -125,13 +145,20 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
       // Using modelLoaded here would block reception on slow-loading models.
       if (!syncEnabledRef.current || !appletReadyRef.current || !appletRef.current || !window.Jmol) return
 
+      // Receiving any state from a peer means initial sync is complete; the passive
+      // period can end early so we start contributing our own updates sooner.
+      hasReceivedInitialSyncRef.current = true
       lastReceivedAtRef.current = Date.now()
       isApplyingRemoteRef.current = true
+
+      // Strip load commands before applying so Jmol doesn't re-fetch the file
+      // (which would blank the viewport for the duration of the XHR).
+      const cleanState = stripLoadCommands(state)
 
       // Debounce application: if multiple states arrive in a burst, apply only the latest.
       // This prevents flooding Jmol with rapid intermediate states during a drag.
       if (pendingStateTimerRef.current !== null) clearTimeout(pendingStateTimerRef.current)
-      pendingStateApplyRef.current = state
+      pendingStateApplyRef.current = cleanState
       pendingStateTimerRef.current = setTimeout(() => {
         if (pendingStateApplyRef.current && appletRef.current && window.Jmol) {
           window.Jmol.script(appletRef.current, pendingStateApplyRef.current)
@@ -160,17 +187,24 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     const interval = setInterval(() => {
       if (isApplyingRemoteRef.current || !appletRef.current || !appletReadyRef.current || !window.Jmol || !socketRef.current) return
 
+      // Passive period: don't emit until we've received initial state from a peer
+      // (hasReceivedInitialSyncRef) OR 3s have elapsed since joining. This prevents
+      // a newly-opened viewer from broadcasting its default loaded state and clobbering
+      // another user's orientation before the peer-joined re-emit (at ~2s) arrives.
+      if (!hasReceivedInitialSyncRef.current && Date.now() - joinedAtRef.current < 3000) return
+
       // Wait until Jmol has a model loaded before emitting anything.
       // We detect this via stateInfo length: a blank/initialising applet produces
       // a very short state script (<200 chars), whereas a loaded structure is much longer.
-      // This is more reliable than evaluateVar('{*}.count') which can return non-numbers
-      // for PNGJ files or before the JSmol engine is fully ready.
-      const state = window.Jmol.getPropertyAsString(appletRef.current, 'stateInfo')
-      if (!state) return
+      const rawState = window.Jmol.getPropertyAsString(appletRef.current, 'stateInfo')
+      if (!rawState) return
       if (!modelLoadedRef.current) {
-        if (state.length > 200) modelLoadedRef.current = true
+        if (rawState.length > 200) modelLoadedRef.current = true
         return // Always skip this cycle; emit starts on the next tick after detection
       }
+
+      // Strip load commands so receivers don't re-fetch the model file on every apply.
+      const state = stripLoadCommands(rawState)
 
       // Quiet period: don't emit for 500ms after receiving a remote update.
       // This breaks the feedback loop where both clients continuously echo each other's state —
