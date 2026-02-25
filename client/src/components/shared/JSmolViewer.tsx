@@ -80,6 +80,9 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   const lastReceivedAtRef = useRef(0)          // timestamp of last received remote update
   const pendingStateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingStateApplyRef = useRef<string | null>(null)
+  // True once Jmol has a model loaded and is ready to emit/receive sync state.
+  // Prevents broadcasting a blank canvas during applet initialisation (Bug 2).
+  const modelLoadedRef = useRef(false)
   const [syncEnabled, setSyncEnabled] = useState(true)
   const syncEnabledRef = useRef(true)
 
@@ -88,16 +91,23 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     syncEnabledRef.current = syncEnabled
   }, [syncEnabled])
 
-  // Connect socket and join group room when viewer opens
+  // Connect socket and join group room when viewer opens.
+  // The room is scoped to group + file so that users in the same group
+  // working on different models don't bleed state into each other (Bug 1).
   useEffect(() => {
     if (!isOpen || !groupId) return
 
+    // Include fileUrl in the room key so each distinct model gets its own sync channel.
+    const syncRoomId = `${groupId}::${fileUrl}`
+
     const socket = io({ path: '/modeling/socket.io/' })
     socketRef.current = socket
-    socket.emit('join-group', groupId)
+    socket.emit('join-group', syncRoomId)
 
     socket.on('viewer-state', (state: string) => {
-      if (!syncEnabledRef.current || !appletRef.current || !window.Jmol) return
+      // Don't apply remote state until our own model is loaded — otherwise a
+      // newly-opened blank canvas gets overwritten before Jmol is ready (Bug 2).
+      if (!syncEnabledRef.current || !modelLoadedRef.current || !appletRef.current || !window.Jmol) return
 
       lastReceivedAtRef.current = Date.now()
       isApplyingRemoteRef.current = true
@@ -119,18 +129,33 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     })
 
     return () => {
-      socket.emit('leave-group', groupId)
+      socket.emit('leave-group', syncRoomId)
       socket.disconnect()
       socketRef.current = null
     }
-  }, [isOpen, groupId])
+  }, [isOpen, groupId, fileUrl])
 
   // Poll Jmol state and emit to group when it changes
   useEffect(() => {
     if (!isOpen || !groupId || !syncEnabled) return
 
+    const syncRoomId = `${groupId}::${fileUrl}`
+
     const interval = setInterval(() => {
       if (isApplyingRemoteRef.current || !appletRef.current || !window.Jmol || !socketRef.current) return
+
+      // Wait until Jmol has a model loaded before emitting anything.
+      // We detect this by checking atom count; a positive count means a structure
+      // is in memory and the stateInfo will be meaningful rather than a blank canvas.
+      if (!modelLoadedRef.current) {
+        try {
+          const count = window.Jmol.evaluateVar(appletRef.current, '{*}.count')
+          if (typeof count === 'number' && count > 0) {
+            modelLoadedRef.current = true
+          }
+        } catch { /* ignore — Jmol not ready yet */ }
+        return // Always skip this cycle; emit starts on the next tick after detection
+      }
 
       // Quiet period: don't emit for 500ms after receiving a remote update.
       // This breaks the feedback loop where both clients continuously echo each other's state —
@@ -140,12 +165,12 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
       const state = window.Jmol.getPropertyAsString(appletRef.current, 'stateInfo')
       if (state && state !== lastEmittedStateRef.current) {
         lastEmittedStateRef.current = state
-        socketRef.current.emit('viewer-state', { groupId, state })
+        socketRef.current.emit('viewer-state', { groupId: syncRoomId, state })
       }
     }, 100) // Reduced from 250ms → faster propagation of the active user's changes
 
     return () => clearInterval(interval)
-  }, [isOpen, groupId, syncEnabled])
+  }, [isOpen, groupId, syncEnabled, fileUrl])
 
   useEffect(() => {
     if (!isOpen || !containerRef.current) return
@@ -154,6 +179,10 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     setConsoleLog([])
 
     const initJSmol = async () => {
+      // Reset sync readiness whenever we reinitialise (viewer opened or model changed).
+      // The poll will set this back to true once it detects a non-zero atom count.
+      modelLoadedRef.current = false
+
       if (!window.Jmol) {
         setError('JSmol library not loaded. Please refresh the page.')
         setLoading(false)
