@@ -47,6 +47,9 @@ io.on('connection', (socket) => {
     // Tell existing room members a new peer has joined so they can re-broadcast
     // their current state, giving the newcomer an up-to-date view immediately.
     socket.to(`group:${groupId}`).emit('peer-joined');
+    // Broadcast updated room size to everyone (including the new joiner).
+    const count = io.sockets.adapter.rooms.get(`group:${groupId}`)?.size ?? 1;
+    io.to(`group:${groupId}`).emit('peer-count', count);
   });
 
   socket.on('viewer-state', ({ groupId, state }: { groupId: string; state: string }) => {
@@ -74,6 +77,18 @@ io.on('connection', (socket) => {
 
   socket.on('leave-group', (groupId: string) => {
     socket.leave(`group:${groupId}`);
+    const count = io.sockets.adapter.rooms.get(`group:${groupId}`)?.size ?? 0;
+    io.to(`group:${groupId}`).emit('peer-count', count);
+  });
+
+  // Use 'disconnecting' (not 'disconnect') so socket.rooms is still populated.
+  socket.on('disconnecting', () => {
+    for (const room of socket.rooms) {
+      if (room !== socket.id && room.startsWith('group:')) {
+        const currentSize = io.sockets.adapter.rooms.get(room)?.size ?? 1;
+        socket.to(room).emit('peer-count', currentSize - 1);
+      }
+    }
   });
 
   socket.on('disconnect', () => {

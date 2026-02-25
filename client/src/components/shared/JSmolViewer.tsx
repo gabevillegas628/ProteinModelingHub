@@ -102,6 +102,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   // users' orientation/colour changes before the peer-joined re-emit arrives.
   const joinedAtRef = useRef(0)
   const hasReceivedInitialSyncRef = useRef(false)
+  const [peerCount, setPeerCount] = useState(1)
   const [syncEnabled, setSyncEnabled] = useState(true)
   const syncEnabledRef = useRef(true)
 
@@ -123,10 +124,15 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     // Reset passive-period state on every (re-)connect.
     joinedAtRef.current = Date.now()
     hasReceivedInitialSyncRef.current = false
+    setPeerCount(1)
 
     const socket = io({ path: '/modeling/socket.io/' })
     socketRef.current = socket
     socket.emit('join-group', syncRoomId)
+
+    socket.on('peer-count', (count: number) => {
+      setPeerCount(count)
+    })
 
     // When a new peer joins our room, wait 2s (giving them time to load their model)
     // then re-broadcast our last known state so they immediately see the current view.
@@ -684,6 +690,19 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
                 </svg>
                 {videoCall.callLoading ? '...' : videoCall.activeCall ? 'In Call' : 'Call'}
               </button>
+            )}
+            {groupId && (
+              <div
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium select-none ${
+                  peerCount > 1
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-gray-100 text-gray-500'
+                }`}
+                title={peerCount > 1 ? `${peerCount} people have this model open` : 'Only you have this model open'}
+              >
+                <span className={`w-2 h-2 rounded-full ${peerCount > 1 ? 'bg-green-500' : 'bg-gray-400'}`} />
+                {peerCount > 1 ? `${peerCount} viewing` : 'Solo'}
+              </div>
             )}
             {groupId && (
               <button
