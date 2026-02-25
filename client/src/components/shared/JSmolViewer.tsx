@@ -80,6 +80,9 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   const lastReceivedAtRef = useRef(0)          // timestamp of last received remote update
   const pendingStateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pendingStateApplyRef = useRef<string | null>(null)
+  // True once the JSmol applet's readyFunction has fired (engine fully initialised).
+  // Calling getPropertyAsString / script before this causes "this.sc is null" errors.
+  const appletReadyRef = useRef(false)
   // True once Jmol has a model loaded and is ready to emit/receive sync state.
   // Prevents broadcasting a blank canvas during applet initialisation (Bug 2).
   const modelLoadedRef = useRef(false)
@@ -143,7 +146,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     const syncRoomId = `${groupId}::${fileUrl.split('?')[0]}`
 
     const interval = setInterval(() => {
-      if (isApplyingRemoteRef.current || !appletRef.current || !window.Jmol || !socketRef.current) return
+      if (isApplyingRemoteRef.current || !appletRef.current || !appletReadyRef.current || !window.Jmol || !socketRef.current) return
 
       // Wait until Jmol has a model loaded before emitting anything.
       // We detect this via stateInfo length: a blank/initialising applet produces
@@ -178,8 +181,9 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     setConsoleLog([])
 
     const initJSmol = async () => {
-      // Reset sync readiness whenever we reinitialise (viewer opened or model changed).
-      // The poll will set this back to true once it detects a non-zero atom count.
+      // Reset both flags whenever we reinitialise so the poll doesn't call JSmol
+      // APIs before the engine is ready.
+      appletReadyRef.current = false
       modelLoadedRef.current = false
 
       if (!window.Jmol) {
@@ -208,6 +212,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
           allowJavaScript: true,
           readyFunction: () => {
             setLoading(false)
+            appletReadyRef.current = true
           }
         }
 
