@@ -108,10 +108,22 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     socketRef.current = socket
     socket.emit('join-group', syncRoomId)
 
+    // When a new peer joins our room, wait 2s (giving them time to load their model)
+    // then re-broadcast our last known state so they immediately see the current view.
+    socket.on('peer-joined', () => {
+      setTimeout(() => {
+        const state = lastEmittedStateRef.current
+        if (state && socketRef.current && syncEnabledRef.current) {
+          socketRef.current.emit('viewer-state', { groupId: syncRoomId, state })
+        }
+      }, 2000)
+    })
+
     socket.on('viewer-state', (state: string) => {
-      // Don't apply remote state until our own model is loaded — otherwise a
-      // newly-opened blank canvas gets overwritten before Jmol is ready (Bug 2).
-      if (!syncEnabledRef.current || !modelLoadedRef.current || !appletRef.current || !window.Jmol) return
+      // Gate on appletReady (engine initialised) rather than modelLoaded — the re-emit
+      // from existing peers arrives ~2s after join, by which point the model is loaded.
+      // Using modelLoaded here would block reception on slow-loading models.
+      if (!syncEnabledRef.current || !appletReadyRef.current || !appletRef.current || !window.Jmol) return
 
       lastReceivedAtRef.current = Date.now()
       isApplyingRemoteRef.current = true

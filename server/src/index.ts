@@ -44,6 +44,9 @@ const pendingStates = new Map<string, PendingState>();
 io.on('connection', (socket) => {
   socket.on('join-group', (groupId: string) => {
     socket.join(`group:${groupId}`);
+    // Tell existing room members a new peer has joined so they can re-broadcast
+    // their current state, giving the newcomer an up-to-date view immediately.
+    socket.to(`group:${groupId}`).emit('peer-joined');
   });
 
   socket.on('viewer-state', ({ groupId, state }: { groupId: string; state: string }) => {
