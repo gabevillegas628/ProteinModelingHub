@@ -97,8 +97,9 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   useEffect(() => {
     if (!isOpen || !groupId) return
 
-    // Include fileUrl in the room key so each distinct model gets its own sync channel.
-    const syncRoomId = `${groupId}::${fileUrl}`
+    // Include the file path (without auth token query params) in the room key so each
+    // distinct model gets its own sync channel within the group.
+    const syncRoomId = `${groupId}::${fileUrl.split('?')[0]}`
 
     const socket = io({ path: '/modeling/socket.io/' })
     socketRef.current = socket
@@ -139,21 +140,20 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   useEffect(() => {
     if (!isOpen || !groupId || !syncEnabled) return
 
-    const syncRoomId = `${groupId}::${fileUrl}`
+    const syncRoomId = `${groupId}::${fileUrl.split('?')[0]}`
 
     const interval = setInterval(() => {
       if (isApplyingRemoteRef.current || !appletRef.current || !window.Jmol || !socketRef.current) return
 
       // Wait until Jmol has a model loaded before emitting anything.
-      // We detect this by checking atom count; a positive count means a structure
-      // is in memory and the stateInfo will be meaningful rather than a blank canvas.
+      // We detect this via stateInfo length: a blank/initialising applet produces
+      // a very short state script (<200 chars), whereas a loaded structure is much longer.
+      // This is more reliable than evaluateVar('{*}.count') which can return non-numbers
+      // for PNGJ files or before the JSmol engine is fully ready.
+      const state = window.Jmol.getPropertyAsString(appletRef.current, 'stateInfo')
+      if (!state) return
       if (!modelLoadedRef.current) {
-        try {
-          const count = window.Jmol.evaluateVar(appletRef.current, '{*}.count')
-          if (typeof count === 'number' && count > 0) {
-            modelLoadedRef.current = true
-          }
-        } catch { /* ignore — Jmol not ready yet */ }
+        if (state.length > 200) modelLoadedRef.current = true
         return // Always skip this cycle; emit starts on the next tick after detection
       }
 
@@ -162,8 +162,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
       // the user who received a state update becomes a pure follower temporarily.
       if (Date.now() - lastReceivedAtRef.current < 500) return
 
-      const state = window.Jmol.getPropertyAsString(appletRef.current, 'stateInfo')
-      if (state && state !== lastEmittedStateRef.current) {
+      if (state !== lastEmittedStateRef.current) {
         lastEmittedStateRef.current = state
         socketRef.current.emit('viewer-state', { groupId: syncRoomId, state })
       }
