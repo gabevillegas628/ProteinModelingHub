@@ -77,6 +77,9 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   const socketRef = useRef<ReturnType<typeof io> | null>(null)
   const isApplyingRemoteRef = useRef(false)
   const lastEmittedStateRef = useRef<string>('')
+  const lastReceivedAtRef = useRef(0)          // timestamp of last received remote update
+  const pendingStateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pendingStateApplyRef = useRef<string | null>(null)
   const [syncEnabled, setSyncEnabled] = useState(true)
   const syncEnabledRef = useRef(true)
 
@@ -95,11 +98,24 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
     socket.on('viewer-state', (state: string) => {
       if (!syncEnabledRef.current || !appletRef.current || !window.Jmol) return
+
+      lastReceivedAtRef.current = Date.now()
       isApplyingRemoteRef.current = true
-      window.Jmol.script(appletRef.current, state)
-      setTimeout(() => {
-        isApplyingRemoteRef.current = false
-      }, 100)
+
+      // Debounce application: if multiple states arrive in a burst, apply only the latest.
+      // This prevents flooding Jmol with rapid intermediate states during a drag.
+      if (pendingStateTimerRef.current !== null) clearTimeout(pendingStateTimerRef.current)
+      pendingStateApplyRef.current = state
+      pendingStateTimerRef.current = setTimeout(() => {
+        if (pendingStateApplyRef.current && appletRef.current && window.Jmol) {
+          window.Jmol.script(appletRef.current, pendingStateApplyRef.current)
+          pendingStateApplyRef.current = null
+        }
+        pendingStateTimerRef.current = null
+        // Hold the lock long enough to cover the next poll cycle, preventing
+        // the receiver from immediately re-emitting the state it just applied.
+        setTimeout(() => { isApplyingRemoteRef.current = false }, 300)
+      }, 50)
     })
 
     return () => {
@@ -115,12 +131,18 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
     const interval = setInterval(() => {
       if (isApplyingRemoteRef.current || !appletRef.current || !window.Jmol || !socketRef.current) return
+
+      // Quiet period: don't emit for 500ms after receiving a remote update.
+      // This breaks the feedback loop where both clients continuously echo each other's state —
+      // the user who received a state update becomes a pure follower temporarily.
+      if (Date.now() - lastReceivedAtRef.current < 500) return
+
       const state = window.Jmol.getPropertyAsString(appletRef.current, 'stateInfo')
       if (state && state !== lastEmittedStateRef.current) {
         lastEmittedStateRef.current = state
         socketRef.current.emit('viewer-state', { groupId, state })
       }
-    }, 250)
+    }, 100) // Reduced from 250ms → faster propagation of the active user's changes
 
     return () => clearInterval(interval)
   }, [isOpen, groupId, syncEnabled])
