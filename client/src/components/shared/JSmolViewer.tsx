@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { io } from 'socket.io-client'
-import { useVideoCall } from '../../context/VideoCallContext'
+// import { useVideoCall } from '../../context/VideoCallContext'
 
 // Declare Jmol as a global variable (loaded from local files)
 declare global {
@@ -63,7 +63,7 @@ function stripLoadCommands(state: string): string {
 }
 
 export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, proteinPdbId, templateId, onSubmit, groupId }: JSmolViewerProps) {
-  const videoCall = useVideoCall()
+  // const videoCall = useVideoCall()
   const containerRef = useRef<HTMLDivElement>(null)
   const consoleRef = useRef<HTMLDivElement>(null)
   const appletRef = useRef<JmolApplet | null>(null)
@@ -666,6 +666,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
             <p className="text-sm text-gray-500">3D Molecular Viewer {proteinPdbId && `• ${proteinPdbId}`}</p>
           </div>
           <div className="flex items-center gap-2">
+            {/* Video call button disabled pending institutional approval
             {groupId && videoCall && (
               <button
                 onClick={() => videoCall.activeCall ? videoCall.endCall() : videoCall.startCall(groupId)}
@@ -683,6 +684,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
                 {videoCall.callLoading ? '...' : videoCall.activeCall ? 'In Call' : 'Call'}
               </button>
             )}
+            */}
             {groupId && (
               <div
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium select-none ${

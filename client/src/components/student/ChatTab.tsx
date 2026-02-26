@@ -3,11 +3,11 @@ import * as studentApi from '../../services/studentApi'
 import * as messageApi from '../../services/messageApi'
 import CommentThread from '../shared/CommentThread'
 import { useAuth } from '../../context/AuthContext'
-import { useVideoCall } from '../../context/VideoCallContext'
+// import { useVideoCall } from '../../context/VideoCallContext'
 
 export default function ChatTab() {
   const { user } = useAuth()
-  const videoCall = useVideoCall()
+  // const videoCall = useVideoCall()
   const [group, setGroup] = useState<studentApi.Group | null>(null)
   const [messages, setMessages] = useState<messageApi.Message[]>([])
   const [readStatuses, setReadStatuses] = useState<messageApi.ReadStatus[]>([])
@@ -85,8 +85,8 @@ export default function ChatTab() {
     )
   }
 
-  const callActive = !!videoCall?.activeCall
-  const callLoading = !!videoCall?.callLoading
+  // const callActive = !!videoCall?.activeCall
+  // const callLoading = !!videoCall?.callLoading
 
   return (
     <div className="bg-white rounded-lg shadow flex flex-col" style={{ height: 'calc(100vh - 280px)', minHeight: '400px' }}>
@@ -98,6 +98,7 @@ export default function ChatTab() {
             {group.name} - {group.proteinName} ({group.proteinPdbId})
           </p>
         </div>
+        {/* Video call button disabled pending institutional approval
         <button
           onClick={() => callActive ? videoCall?.endCall() : videoCall?.startCall(group.id)}
           disabled={callLoading}
@@ -113,12 +114,14 @@ export default function ChatTab() {
           </svg>
           {callLoading ? 'Connecting...' : callActive ? 'End Call' : 'Video Call'}
         </button>
+        */}
       </div>
 
-      {/* Call error banner */}
+      {/* Call error banner - disabled with video call button
       {videoCall?.callError && (
         <div className="px-6 py-2 bg-red-50 text-red-600 text-sm shrink-0">{videoCall.callError}</div>
       )}
+      */}
 
       {/* Chat Area */}
       <div className="flex-1 p-6 overflow-hidden">
