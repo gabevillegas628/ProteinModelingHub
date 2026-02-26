@@ -42,6 +42,7 @@ model User {
   messages          Message[]
   literature        Literature[]
   messageReadStatus MessageReadStatus[]
+  viewerChats       ViewerChat[]
 
   @@map("users")
 }
@@ -61,7 +62,8 @@ model ModelTemplate {
   updatedAt   DateTime @updatedAt
 
   // Relations
-  submissions Submission[]
+  submissions  Submission[]
+  viewerChats  ViewerChat[]
 
   @@map("model_templates")
 }
@@ -85,6 +87,7 @@ model Group {
   messages          Message[]
   literature        Literature[]
   messageReadStatus MessageReadStatus[]
+  viewerChats       ViewerChat[]
 
   @@map("groups")
 }
@@ -202,4 +205,26 @@ model Literature {
 
   @@index([groupId])
   @@map("literature")
+}
+
+// ============================================
+// VIEWER CHAT
+// Real-time chat scoped to a group + model template
+// Separate from instructor submission feedback
+// ============================================
+model ViewerChat {
+  id              String        @id @default(cuid())
+  groupId         String
+  modelTemplateId String
+  userId          String
+  content         String
+  createdAt       DateTime      @default(now())
+
+  // Relations
+  group         Group         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  modelTemplate ModelTemplate @relation(fields: [modelTemplateId], references: [id], onDelete: Cascade)
+  user          User          @relation(fields: [userId], references: [id])
+
+  @@index([groupId, modelTemplateId, createdAt])
+  @@map("viewer_chat")
 }

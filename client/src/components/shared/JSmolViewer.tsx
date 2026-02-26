@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { io } from 'socket.io-client'
+import { useAuth } from '../../context/AuthContext'
+import * as viewerChatApi from '../../services/viewerChatApi'
 
 // Declare Jmol as a global variable (loaded from local files)
 declare global {
@@ -103,6 +105,16 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   const [peerCount, setPeerCount] = useState(1)
   const [syncEnabled, setSyncEnabled] = useState(true)
   const syncEnabledRef = useRef(true)
+
+  // Viewer chat state
+  const { user } = useAuth()
+  const [chatOpen, setChatOpen] = useState(false)
+  const [chatMessages, setChatMessages] = useState<viewerChatApi.ViewerChatMessage[]>([])
+  const [chatInput, setChatInput] = useState('')
+  const [chatPosting, setChatPosting] = useState(false)
+  const [chatUnread, setChatUnread] = useState(0)
+  const chatBottomRef = useRef<HTMLDivElement>(null)
+  const chatOpenRef = useRef(false)
 
   // Keep syncEnabledRef in sync with state
   useEffect(() => {
@@ -651,6 +663,57 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     }
   }
 
+  // Chat: load messages
+  const loadChat = useCallback(async () => {
+    if (!groupId || !templateId) return
+    try {
+      const msgs = await viewerChatApi.getViewerChat(groupId, templateId)
+      setChatMessages(msgs)
+      if (!chatOpenRef.current) {
+        setChatUnread(prev => {
+          // count any messages after what we last knew about
+          return msgs.length > chatMessages.length ? prev + (msgs.length - chatMessages.length) : prev
+        })
+      }
+    } catch {
+      // silent — don't disrupt the viewer for chat errors
+    }
+  }, [groupId, templateId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Chat: poll every 5s when viewer is open
+  useEffect(() => {
+    if (!groupId || !templateId || !isOpen) return
+    loadChat()
+    const interval = setInterval(loadChat, 5000)
+    return () => clearInterval(interval)
+  }, [groupId, templateId, isOpen, loadChat])
+
+  // Chat: auto-scroll to bottom when panel is open and messages arrive
+  useEffect(() => {
+    if (chatOpen) {
+      chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+      setChatUnread(0)
+    }
+  }, [chatMessages, chatOpen])
+
+  // Chat: keep ref in sync for unread counting
+  useEffect(() => { chatOpenRef.current = chatOpen }, [chatOpen])
+
+  const handleChatPost = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!groupId || !templateId || !chatInput.trim() || chatPosting) return
+    try {
+      setChatPosting(true)
+      const msg = await viewerChatApi.postViewerChat(groupId, templateId, chatInput.trim())
+      setChatMessages(prev => [...prev, msg])
+      setChatInput('')
+    } catch {
+      // silent
+    } finally {
+      setChatPosting(false)
+    }
+  }
+
   if (!isOpen) return null
 
   return (
@@ -732,6 +795,87 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
               </div>
             )}
             <div ref={containerRef} className="absolute inset-0" />
+
+            {/* Floating chat widget — only shown when groupId + templateId available */}
+            {groupId && templateId && (
+              <div className="absolute bottom-3 right-3 z-20 flex flex-col items-end gap-1">
+
+                {/* Expanded chat panel */}
+                {chatOpen && (
+                  <div className="w-72 h-80 bg-gray-900/95 rounded-lg border border-gray-700 shadow-2xl flex flex-col overflow-hidden">
+                    {/* Chat header */}
+                    <div className="flex items-center justify-between px-3 py-2 bg-gray-800 shrink-0">
+                      <span className="text-white text-xs font-medium">Model Chat</span>
+                      <button onClick={() => setChatOpen(false)} className="text-gray-400 hover:text-white">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+                        </svg>
+                      </button>
+                    </div>
+
+                    {/* Messages */}
+                    <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                      {chatMessages.length === 0 && (
+                        <p className="text-gray-500 text-xs text-center mt-4">No messages yet. Say something!</p>
+                      )}
+                      {chatMessages.map(msg => {
+                        const isOwn = msg.user.id === user?.id
+                        return (
+                          <div key={msg.id} className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}>
+                            {!isOwn && (
+                              <span className="text-gray-400 text-[10px] mb-0.5 px-1">
+                                {msg.user.firstName} {msg.user.lastName}
+                              </span>
+                            )}
+                            <div className={`max-w-[85%] px-2.5 py-1.5 rounded-lg text-xs break-words ${
+                              isOwn ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-100'
+                            }`}>
+                              {msg.content}
+                            </div>
+                          </div>
+                        )
+                      })}
+                      <div ref={chatBottomRef} />
+                    </div>
+
+                    {/* Input */}
+                    <form onSubmit={handleChatPost} className="flex gap-1.5 p-2 border-t border-gray-700 shrink-0">
+                      <input
+                        type="text"
+                        value={chatInput}
+                        onChange={e => setChatInput(e.target.value)}
+                        placeholder="Message..."
+                        disabled={chatPosting}
+                        className="flex-1 bg-gray-800 text-white text-xs rounded px-2 py-1.5 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+                      />
+                      <button
+                        type="submit"
+                        disabled={!chatInput.trim() || chatPosting}
+                        className="bg-blue-600 text-white px-2.5 py-1.5 rounded text-xs font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors"
+                      >
+                        Send
+                      </button>
+                    </form>
+                  </div>
+                )}
+
+                {/* Toggle button */}
+                <button
+                  onClick={() => { setChatOpen(o => !o); setChatUnread(0) }}
+                  className="relative bg-gray-800 hover:bg-gray-700 text-white rounded-full w-10 h-10 flex items-center justify-center shadow-lg border border-gray-600 transition-colors"
+                  title={chatOpen ? 'Close chat' : 'Open model chat'}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  {chatUnread > 0 && !chatOpen && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                      {chatUnread > 9 ? '9+' : chatUnread}
+                    </span>
+                  )}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Control Panel */}

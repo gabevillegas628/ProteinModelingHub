@@ -4,6 +4,7 @@ import adminRoutes from './admin.js';
 import studentRoutes from './student.js';
 import instructorRoutes from './instructor.js';
 import messageRoutes from './messages.js';
+import viewerChatRoutes from './viewerChat.js';
 
 const router = Router();
 
@@ -12,5 +13,6 @@ router.use('/admin', adminRoutes);
 router.use('/student', studentRoutes);
 router.use('/instructor', instructorRoutes);
 router.use('/messages', messageRoutes);
+router.use('/viewer-chat', viewerChatRoutes);
 
 export default router;

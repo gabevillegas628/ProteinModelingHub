@@ -16,6 +16,7 @@ interface ViewerState {
   fileUrl: string
   modelName: string
   proteinPdbId?: string
+  templateId?: string
 }
 
 interface CommentsState {
@@ -55,12 +56,13 @@ export default function SubmissionsTab({ groupId, proteinPdbId }: Props) {
     }
   }
 
-  const openViewer = (submissionId: string, modelName: string) => {
+  const openViewer = (submissionId: string, modelName: string, templateId?: string) => {
     setViewer({
       isOpen: true,
       fileUrl: instructorApi.getSubmissionFileUrl(submissionId),
       modelName,
-      proteinPdbId
+      proteinPdbId,
+      templateId
     })
   }
 
@@ -276,11 +278,11 @@ export default function SubmissionsTab({ groupId, proteinPdbId }: Props) {
                           alt={model.name}
                           className="max-w-md h-auto rounded-md border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity"
                           style={{ maxHeight: '300px' }}
-                          onClick={() => openViewer(model.submission!.id, model.name)}
+                          onClick={() => openViewer(model.submission!.id, model.name, model.id)}
                         />
                         <div className="flex flex-col gap-2">
                           <button
-                            onClick={() => openViewer(model.submission!.id, model.name)}
+                            onClick={() => openViewer(model.submission!.id, model.name, model.id)}
                             className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 transition-colors text-sm"
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -393,6 +395,7 @@ export default function SubmissionsTab({ groupId, proteinPdbId }: Props) {
         modelName={viewer.modelName}
         proteinPdbId={viewer.proteinPdbId}
         groupId={groupId}
+        templateId={viewer.templateId}
       />
 
       {/* Discussion Modal */}
