@@ -3,11 +3,9 @@ import * as studentApi from '../../services/studentApi'
 import * as messageApi from '../../services/messageApi'
 import CommentThread from '../shared/CommentThread'
 import { useAuth } from '../../context/AuthContext'
-// import { useVideoCall } from '../../context/VideoCallContext'
 
 export default function ChatTab() {
   const { user } = useAuth()
-  // const videoCall = useVideoCall()
   const [group, setGroup] = useState<studentApi.Group | null>(null)
   const [messages, setMessages] = useState<messageApi.Message[]>([])
   const [readStatuses, setReadStatuses] = useState<messageApi.ReadStatus[]>([])
@@ -85,9 +83,6 @@ export default function ChatTab() {
     )
   }
 
-  // const callActive = !!videoCall?.activeCall
-  // const callLoading = !!videoCall?.callLoading
-
   return (
     <div className="bg-white rounded-lg shadow flex flex-col" style={{ height: 'calc(100vh - 280px)', minHeight: '400px' }}>
       {/* Header */}
@@ -98,30 +93,21 @@ export default function ChatTab() {
             {group.name} - {group.proteinName} ({group.proteinPdbId})
           </p>
         </div>
-        {/* Video call button disabled pending institutional approval
-        <button
-          onClick={() => callActive ? videoCall?.endCall() : videoCall?.startCall(group.id)}
-          disabled={callLoading}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-60 ${
-            callActive
-              ? 'bg-red-100 text-red-700 hover:bg-red-200'
-              : 'bg-blue-600 text-white hover:bg-blue-700'
-          }`}
-          title={callActive ? 'End the video call' : 'Start a video call with your group'}
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-          </svg>
-          {callLoading ? 'Connecting...' : callActive ? 'End Call' : 'Video Call'}
-        </button>
-        */}
+        {group.meetUrl && (
+          <a
+            href={group.meetUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+            title="Join your group's Google Meet call"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+            Video Call
+          </a>
+        )}
       </div>
-
-      {/* Call error banner - disabled with video call button
-      {videoCall?.callError && (
-        <div className="px-6 py-2 bg-red-50 text-red-600 text-sm shrink-0">{videoCall.callError}</div>
-      )}
-      */}
 
       {/* Chat Area */}
       <div className="flex-1 p-6 overflow-hidden">

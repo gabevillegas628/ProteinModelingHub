@@ -1,32 +1,12 @@
 import { useState } from 'react'
 import { useAuth } from '../context/AuthContext'
-import { VideoCallProvider, useVideoCall } from '../context/VideoCallContext'
-import FloatingVideoCall from '../components/shared/FloatingVideoCall'
 import ModelsTab from '../components/student/ModelsTab'
 import ChatTab from '../components/student/ChatTab'
 import LiteratureTab from '../components/student/LiteratureTab'
 
 type TabType = 'models' | 'chat' | 'literature'
 
-// Shown in the tab bar when a call is active
-function CallIndicator() {
-  const videoCall = useVideoCall()
-  if (!videoCall?.activeCall) return null
-  return (
-    <div className="ml-auto flex items-center gap-2 px-4">
-      <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-      <span className="text-sm text-green-600 font-medium">Call Active</span>
-      <button
-        onClick={videoCall.endCall}
-        className="text-xs text-red-500 hover:text-red-700 font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors"
-      >
-        End
-      </button>
-    </div>
-  )
-}
-
-function DashboardContent() {
+export default function StudentDashboard() {
   const { user, logout } = useAuth()
   const [activeTab, setActiveTab] = useState<TabType>('models')
 
@@ -85,7 +65,7 @@ function DashboardContent() {
       <div className="max-w-7xl mx-auto px-4 py-6">
         {/* Tab Navigation */}
         <div className="bg-white rounded-lg shadow mb-6">
-          <nav className="flex border-b border-gray-200 items-center">
+          <nav className="flex border-b border-gray-200">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
@@ -100,7 +80,6 @@ function DashboardContent() {
                 {tab.label}
               </button>
             ))}
-            <CallIndicator />
           </nav>
         </div>
 
@@ -111,17 +90,6 @@ function DashboardContent() {
           {activeTab === 'literature' && <LiteratureTab />}
         </div>
       </div>
-
-      {/* Persistent floating video call — survives tab switches */}
-      <FloatingVideoCall />
     </div>
-  )
-}
-
-export default function StudentDashboard() {
-  return (
-    <VideoCallProvider>
-      <DashboardContent />
-    </VideoCallProvider>
   )
 }

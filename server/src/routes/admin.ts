@@ -136,10 +136,10 @@ router.get('/groups', async (req: Request, res: Response) => {
 // Create group
 router.post('/groups', async (req: Request, res: Response) => {
   try {
-    const { name, proteinPdbId, proteinName } = req.body;
+    const { name, proteinPdbId, proteinName, meetUrl } = req.body;
 
     const group = await prisma.group.create({
-      data: { name, proteinPdbId, proteinName },
+      data: { name, proteinPdbId, proteinName, meetUrl: meetUrl || null },
     });
     res.status(201).json(group);
   } catch (error) {
@@ -152,11 +152,11 @@ router.post('/groups', async (req: Request, res: Response) => {
 router.put('/groups/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
-    const { name, proteinPdbId, proteinName } = req.body;
+    const { name, proteinPdbId, proteinName, meetUrl } = req.body;
 
     const group = await prisma.group.update({
       where: { id },
-      data: { name, proteinPdbId, proteinName },
+      data: { name, proteinPdbId, proteinName, meetUrl: meetUrl ?? undefined },
     });
     res.json(group);
   } catch (error) {

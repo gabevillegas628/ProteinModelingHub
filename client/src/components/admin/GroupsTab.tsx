@@ -12,7 +12,7 @@ export default function GroupsTab() {
   const [csvUploading, setCsvUploading] = useState(false)
   const [csvResult, setCsvResult] = useState<adminApi.CsvUploadResult | null>(null)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [formData, setFormData] = useState({ name: '', proteinPdbId: '', proteinName: '' })
+  const [formData, setFormData] = useState({ name: '', proteinPdbId: '', proteinName: '', meetUrl: '' })
   const [addingMemberTo, setAddingMemberTo] = useState<string | null>(null)
   const [selectedUserId, setSelectedUserId] = useState('')
 
@@ -44,7 +44,7 @@ export default function GroupsTab() {
       } else {
         await adminApi.createGroup(formData)
       }
-      setFormData({ name: '', proteinPdbId: '', proteinName: '' })
+      setFormData({ name: '', proteinPdbId: '', proteinName: '', meetUrl: '' })
       setShowForm(false)
       setEditingId(null)
       loadData()
@@ -57,7 +57,8 @@ export default function GroupsTab() {
     setFormData({
       name: group.name,
       proteinPdbId: group.proteinPdbId,
-      proteinName: group.proteinName
+      proteinName: group.proteinName,
+      meetUrl: group.meetUrl ?? ''
     })
     setEditingId(group.id)
     setShowForm(true)
@@ -157,7 +158,7 @@ export default function GroupsTab() {
           </button>
           <button
             onClick={() => {
-              setFormData({ name: '', proteinPdbId: '', proteinName: '' })
+              setFormData({ name: '', proteinPdbId: '', proteinName: '', meetUrl: '' })
               setEditingId(null)
               setShowForm(true)
             }}
@@ -292,6 +293,16 @@ export default function GroupsTab() {
                   required
                 />
               </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Google Meet Link <span className="text-gray-400 font-normal">(optional)</span></label>
+                <input
+                  type="url"
+                  value={formData.meetUrl}
+                  onChange={(e) => setFormData({ ...formData, meetUrl: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="https://meet.google.com/xxx-xxxx-xxx"
+                />
+              </div>
               <div className="flex justify-end gap-3">
                 <button
                   type="button"
@@ -330,6 +341,11 @@ export default function GroupsTab() {
                   <p className="text-sm text-gray-500">
                     Protein: {group.proteinName} ({group.proteinPdbId})
                   </p>
+                  {group.meetUrl && (
+                    <a href={group.meetUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline">
+                      Meet link
+                    </a>
+                  )}
                 </div>
                 <div className="flex gap-2">
                   <button

@@ -38,6 +38,7 @@ export interface Group {
   name: string;
   proteinPdbId: string;
   proteinName: string;
+  meetUrl: string | null;
   createdAt: string;
 }
 
@@ -189,12 +190,3 @@ export function requestReview(): Promise<ReviewRequestResponse> {
   return request('/request-review', { method: 'POST' });
 }
 
-export interface VideoTokenResponse {
-  token: string;
-  roomName: string;
-  appId: string;
-}
-
-export function getVideoToken(groupId: string): Promise<VideoTokenResponse> {
-  return request(`/video-token?groupId=${encodeURIComponent(groupId)}`);
-}
