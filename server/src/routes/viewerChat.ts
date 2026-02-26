@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
+import { authenticate, AuthRequest } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 
 const router = Router();
@@ -15,7 +15,8 @@ async function hasGroupAccess(userId: string, userRole: string, groupId: string)
 // GET /viewer-chat/:groupId/:templateId — fetch all messages
 router.get('/:groupId/:templateId', async (req: AuthRequest, res: Response) => {
   try {
-    const { groupId, templateId } = req.params;
+    const groupId = req.params.groupId as string;
+    const templateId = req.params.templateId as string;
     const userId = req.user!.userId;
     const userRole = req.user!.role;
 
@@ -41,7 +42,8 @@ router.get('/:groupId/:templateId', async (req: AuthRequest, res: Response) => {
 // POST /viewer-chat/:groupId/:templateId — post a message
 router.post('/:groupId/:templateId', async (req: AuthRequest, res: Response) => {
   try {
-    const { groupId, templateId } = req.params;
+    const groupId = req.params.groupId as string;
+    const templateId = req.params.templateId as string;
     const { content } = req.body;
     const userId = req.user!.userId;
     const userRole = req.user!.role;
