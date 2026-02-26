@@ -75,7 +75,6 @@ model Group {
   name                   String    // e.g., "Team Alpha" or auto-generated
   proteinPdbId           String    // PDB identifier, e.g., "1ABC"
   proteinName            String    // Display name, e.g., "Hemoglobin"
-  meetUrl                String?   // Google Meet link for this group
   lastReviewRequestedAt  DateTime? // When students last requested instructor review
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt

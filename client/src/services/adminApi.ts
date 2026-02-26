@@ -55,7 +55,6 @@ export interface Group {
   name: string;
   proteinPdbId: string;
   proteinName: string;
-  meetUrl: string | null;
   createdAt: string;
   members: GroupMember[];
 }

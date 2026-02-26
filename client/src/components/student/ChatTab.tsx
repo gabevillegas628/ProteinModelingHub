@@ -86,27 +86,11 @@ export default function ChatTab() {
   return (
     <div className="bg-white rounded-lg shadow flex flex-col" style={{ height: 'calc(100vh - 280px)', minHeight: '400px' }}>
       {/* Header */}
-      <div className="px-6 py-4 border-b border-gray-200 shrink-0 flex items-center justify-between">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-800">Group Chat</h2>
-          <p className="text-sm text-gray-500">
-            {group.name} - {group.proteinName} ({group.proteinPdbId})
-          </p>
-        </div>
-        {group.meetUrl && (
-          <a
-            href={group.meetUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors"
-            title="Join your group's Google Meet call"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.723v6.554a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
-            Video Call
-          </a>
-        )}
+      <div className="px-6 py-4 border-b border-gray-200 shrink-0">
+        <h2 className="text-lg font-semibold text-gray-800">Group Chat</h2>
+        <p className="text-sm text-gray-500">
+          {group.name} - {group.proteinName} ({group.proteinPdbId})
+        </p>
       </div>
 
       {/* Chat Area */}
