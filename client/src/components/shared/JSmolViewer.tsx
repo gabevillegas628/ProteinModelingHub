@@ -1033,32 +1033,32 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
     {/* Chat panel - rendered via portal to escape JSmol's z-index stacking */}
     {isOpen && groupId && templateId && chatOpen && createPortal(
-      <div className="fixed bottom-6 right-6 w-72 h-80 bg-gray-900/95 rounded-lg border border-gray-700 shadow-2xl flex flex-col overflow-hidden" style={{ zIndex: 9999 }}>
+      <div className="fixed bottom-6 right-6 w-96 bg-gray-900/95 rounded-lg border border-gray-700 shadow-2xl flex flex-col overflow-hidden" style={{ zIndex: 9999, height: '480px' }}>
         {/* Chat header */}
-        <div className="flex items-center justify-between px-3 py-2 bg-gray-800 shrink-0">
-          <span className="text-white text-xs font-medium">Model Chat</span>
+        <div className="flex items-center justify-between px-3 py-2.5 bg-gray-800 shrink-0">
+          <span className="text-white text-sm font-medium">Model Chat</span>
           <button onClick={() => setChatOpen(false)} className="text-gray-400 hover:text-white">
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-2 space-y-2">
+        <div className="flex-1 overflow-y-auto p-3 space-y-2">
           {chatMessages.length === 0 && (
-            <p className="text-gray-500 text-xs text-center mt-4">No messages yet. Say something!</p>
+            <p className="text-gray-500 text-sm text-center mt-6">No messages yet. Say something!</p>
           )}
           {chatMessages.map(msg => {
             const isOwn = msg.user.id === user?.id
             return (
               <div key={msg.id} className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}>
                 {!isOwn && (
-                  <span className="text-gray-400 text-[10px] mb-0.5 px-1">
+                  <span className="text-gray-400 text-xs mb-0.5 px-1">
                     {msg.user.firstName} {msg.user.lastName}
                   </span>
                 )}
-                <div className={`max-w-[85%] px-2.5 py-1.5 rounded-lg text-xs wrap-break-word ${
+                <div className={`max-w-[85%] px-3 py-2 rounded-lg text-sm wrap-break-word ${
                   isOwn ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-100'
                 }`}>
                   {msg.content}
@@ -1070,19 +1070,30 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
         </div>
 
         {/* Input */}
-        <form onSubmit={handleChatPost} className="flex gap-1.5 p-2 border-t border-gray-700 shrink-0">
-          <input
-            type="text"
+        <form onSubmit={handleChatPost} className="flex gap-2 p-2.5 border-t border-gray-700 shrink-0 items-end">
+          <textarea
             value={chatInput}
-            onChange={e => setChatInput(e.target.value)}
-            placeholder="Message..."
+            onChange={e => {
+              setChatInput(e.target.value)
+              e.target.style.height = 'auto'
+              e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px'
+            }}
+            onKeyDown={e => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault()
+                handleChatPost(e as unknown as React.FormEvent)
+              }
+            }}
+            placeholder="Message… (Enter to send, Shift+Enter for newline)"
             disabled={chatPosting}
-            className="flex-1 bg-gray-800 text-white text-xs rounded px-2 py-1.5 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+            rows={1}
+            className="flex-1 bg-gray-800 text-white text-sm rounded px-2.5 py-2 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 resize-none overflow-y-auto"
+            style={{ minHeight: '36px', maxHeight: '120px' }}
           />
           <button
             type="submit"
             disabled={!chatInput.trim() || chatPosting}
-            className="bg-blue-600 text-white px-2.5 py-1.5 rounded text-xs font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors"
+            className="bg-blue-600 text-white px-3 py-2 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-40 transition-colors shrink-0"
           >
             Send
           </button>
