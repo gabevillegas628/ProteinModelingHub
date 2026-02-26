@@ -392,6 +392,7 @@ export default function SubmissionsTab({ groupId, proteinPdbId }: Props) {
         fileUrl={viewer.fileUrl}
         modelName={viewer.modelName}
         proteinPdbId={viewer.proteinPdbId}
+        groupId={groupId}
       />
 
       {/* Discussion Modal */}
