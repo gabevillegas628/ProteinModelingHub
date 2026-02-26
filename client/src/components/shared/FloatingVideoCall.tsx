@@ -22,16 +22,23 @@ declare global {
 
 const CALL_HEIGHT = 420
 const CALL_WIDTH = 480
+const HEADER_HEIGHT = 44 // approximate header bar height for clamping
 
 export default function FloatingVideoCall() {
   const videoCall = useVideoCall()
   const [minimized, setMinimized] = useState(false)
+  const [pos, setPos] = useState<{ x: number; y: number } | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
   const apiRef = useRef<JaaSApiInstance | null>(null)
+  const dragRef = useRef({ dragging: false, startMouseX: 0, startMouseY: 0, startPosX: 0, startPosY: 0 })
 
   const activeCall = videoCall?.activeCall ?? null
   const endCall = videoCall?.endCall
   const isFirefox = videoCall?.isFirefox ?? false
+
+  // Reset position when a new call starts
+  useEffect(() => { setPos(null) }, [activeCall?.roomName])
 
   useEffect(() => {
     if (!activeCall || !containerRef.current) return
@@ -71,15 +78,51 @@ export default function FloatingVideoCall() {
     }
   }, [activeCall])
 
+  // Global mouse move/up listeners for dragging
+  useEffect(() => {
+    const onMouseMove = (e: MouseEvent) => {
+      if (!dragRef.current.dragging) return
+      const dx = e.clientX - dragRef.current.startMouseX
+      const dy = e.clientY - dragRef.current.startMouseY
+      const newX = Math.max(0, Math.min(dragRef.current.startPosX + dx, window.innerWidth - CALL_WIDTH))
+      const newY = Math.max(0, Math.min(dragRef.current.startPosY + dy, window.innerHeight - HEADER_HEIGHT))
+      setPos({ x: newX, y: newY })
+    }
+    const onMouseUp = () => { dragRef.current.dragging = false }
+    document.addEventListener('mousemove', onMouseMove)
+    document.addEventListener('mouseup', onMouseUp)
+    return () => {
+      document.removeEventListener('mousemove', onMouseMove)
+      document.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [])
+
+  const onHeaderMouseDown = (e: React.MouseEvent) => {
+    if ((e.target as HTMLElement).closest('button')) return
+    e.preventDefault()
+    const rect = panelRef.current!.getBoundingClientRect()
+    dragRef.current = { dragging: true, startMouseX: e.clientX, startMouseY: e.clientY, startPosX: rect.left, startPosY: rect.top }
+    setPos({ x: rect.left, y: rect.top })
+  }
+
   if (!activeCall) return null
+
+  const panelStyle: React.CSSProperties = pos
+    ? { position: 'fixed', left: pos.x, top: pos.y, zIndex: 300, width: CALL_WIDTH }
+    : { position: 'fixed', bottom: 16, right: 16, zIndex: 300, width: CALL_WIDTH }
 
   return createPortal(
     <div
-      className="fixed bottom-4 right-4 shadow-2xl rounded-lg overflow-hidden bg-gray-900 border border-gray-700"
-      style={{ zIndex: 300, width: CALL_WIDTH }}
+      ref={panelRef}
+      className="shadow-2xl rounded-lg overflow-hidden bg-gray-900 border border-gray-700"
+      style={panelStyle}
     >
-      {/* Header bar */}
-      <div className="flex items-center justify-between px-3 py-2 bg-gray-800">
+      {/* Header bar — drag handle */}
+      <div
+        className="flex items-center justify-between px-3 py-2 bg-gray-800 select-none"
+        style={{ cursor: dragRef.current.dragging ? 'grabbing' : 'grab' }}
+        onMouseDown={onHeaderMouseDown}
+      >
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0" />
           <span className="text-white text-sm font-medium">Group Call</span>

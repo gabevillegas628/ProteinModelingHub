@@ -70,7 +70,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   const originalStateRef = useRef<{ stateCommands: string | null }>({ stateCommands: null })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [isSpinning, setIsSpinning] = useState(false)
+
   const [displayStyle, setDisplayStyle] = useState<DisplayStyle>('cartoon')
   const [colorScheme, setColorScheme] = useState<ColorScheme>('structure')
   const [showControls, setShowControls] = useState(true)
@@ -363,7 +363,6 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     if (originalStateRef.current.stateCommands && appletRef.current && window.Jmol) {
       console.log('Resetting to student view')
       runScript(originalStateRef.current.stateCommands)
-      setIsSpinning(false)
     }
   }
 
@@ -393,18 +392,8 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     runScript(colorCommands[scheme])
   }
 
-  const toggleSpin = () => {
-    if (isSpinning) {
-      runScript('spin off')
-    } else {
-      runScript('spin on')
-    }
-    setIsSpinning(!isSpinning)
-  }
-
   const handleReset = () => {
     runScript('reset; zoom 100')
-    setIsSpinning(false)
   }
 
   const handleZoom = (direction: 'in' | 'out') => {
@@ -803,16 +792,6 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">View Controls</label>
                   <div className="grid grid-cols-2 gap-2">
-                    <button
-                      onClick={toggleSpin}
-                      className={`px-3 py-2 rounded text-sm font-medium transition-colors ${
-                        isSpinning
-                          ? 'bg-blue-600 text-white'
-                          : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'
-                      }`}
-                    >
-                      {isSpinning ? 'Stop Spin' : 'Spin'}
-                    </button>
                     <button
                       onClick={handleReset}
                       className="px-3 py-2 bg-white border border-gray-300 rounded text-sm font-medium text-gray-700 hover:bg-gray-50"
