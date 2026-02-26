@@ -117,9 +117,11 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   useEffect(() => {
     if (!isOpen || !groupId) return
 
-    // Include the file path (without auth token query params) in the room key so each
-    // distinct model gets its own sync channel within the group.
-    const syncRoomId = `${groupId}::${fileUrl.split('?')[0]}`
+    // Use just the file ID (last path segment, no extension) as the room key so that
+    // students (/models/file/<id>.png) and instructors (/submissions/file/<id>.png)
+    // resolve to the same room when viewing the same submission.
+    const fileId = fileUrl.split('?')[0].split('/').pop()?.replace(/\.png$/, '') ?? fileUrl
+    const syncRoomId = `${groupId}::${fileId}`
 
     // Reset passive-period state on every (re-)connect.
     joinedAtRef.current = Date.now()
@@ -188,7 +190,8 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   useEffect(() => {
     if (!isOpen || !groupId || !syncEnabled) return
 
-    const syncRoomId = `${groupId}::${fileUrl.split('?')[0]}`
+    const fileId = fileUrl.split('?')[0].split('/').pop()?.replace(/\.png$/, '') ?? fileUrl
+    const syncRoomId = `${groupId}::${fileId}`
 
     const interval = setInterval(() => {
       if (isApplyingRemoteRef.current || !appletRef.current || !appletReadyRef.current || !window.Jmol || !socketRef.current) return
