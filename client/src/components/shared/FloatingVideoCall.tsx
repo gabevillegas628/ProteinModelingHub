@@ -50,6 +50,7 @@ export default function FloatingVideoCall() {
         configOverwrite: {
           startWithAudioMuted: false,
           startWithVideoMuted: false,
+          p2p: { enabled: false },
         },
       })
     }
