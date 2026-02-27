@@ -1103,9 +1103,9 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
                 handleChatPost(e as unknown as React.FormEvent)
               }
             }}
-            placeholder="Message… (Enter to send, Shift+Enter for newline)"
+            placeholder="Message… (Shift+Enter for new line)"
             rows={1}
-            className="flex-1 bg-gray-800 text-white text-sm rounded px-2.5 py-2 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none overflow-y-auto"
+            className="flex-1 bg-gray-800 text-white text-sm rounded px-2.5 py-2 placeholder-gray-500 focus:outline-none focus:ring-inset focus:ring-1 focus:ring-blue-500 resize-none overflow-y-auto"
             style={{ minHeight: '36px', maxHeight: '120px' }}
           />
           <button
