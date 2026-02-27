@@ -28,7 +28,12 @@ export interface ViewerChatMessage {
   };
 }
 
-export function getViewerChat(groupId: string, templateId: string): Promise<ViewerChatMessage[]> {
+export interface ViewerChatResponse {
+  messages: ViewerChatMessage[];
+  unreadCount: number;
+}
+
+export function getViewerChat(groupId: string, templateId: string): Promise<ViewerChatResponse> {
   return request(`/${groupId}/${templateId}`);
 }
 
@@ -36,5 +41,12 @@ export function postViewerChat(groupId: string, templateId: string, content: str
   return request(`/${groupId}/${templateId}`, {
     method: 'POST',
     body: JSON.stringify({ content }),
+  });
+}
+
+export function markViewerChatRead(groupId: string, templateId: string, lastReadAt: string): Promise<void> {
+  return request(`/${groupId}/${templateId}/read`, {
+    method: 'PUT',
+    body: JSON.stringify({ lastReadAt }),
   });
 }

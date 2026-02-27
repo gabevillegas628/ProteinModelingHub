@@ -37,12 +37,13 @@ model User {
   updatedAt            DateTime  @updatedAt
 
   // Relations
-  groupMemberships  GroupMember[]
-  submissions       Submission[]
-  messages          Message[]
-  literature        Literature[]
-  messageReadStatus MessageReadStatus[]
-  viewerChats       ViewerChat[]
+  groupMemberships       GroupMember[]
+  submissions            Submission[]
+  messages               Message[]
+  literature             Literature[]
+  messageReadStatus      MessageReadStatus[]
+  viewerChats            ViewerChat[]
+  viewerChatReadStatuses ViewerChatReadStatus[]
 
   @@map("users")
 }
@@ -82,12 +83,13 @@ model Group {
   updatedAt              DateTime  @updatedAt
 
   // Relations
-  members           GroupMember[]
-  submissions       Submission[]
-  messages          Message[]
-  literature        Literature[]
-  messageReadStatus MessageReadStatus[]
-  viewerChats       ViewerChat[]
+  members                GroupMember[]
+  submissions            Submission[]
+  messages               Message[]
+  literature             Literature[]
+  messageReadStatus      MessageReadStatus[]
+  viewerChats            ViewerChat[]
+  viewerChatReadStatuses ViewerChatReadStatus[]
 
   @@map("groups")
 }
@@ -227,4 +229,24 @@ model ViewerChat {
 
   @@index([groupId, modelTemplateId, createdAt])
   @@map("viewer_chat")
+}
+
+// ============================================
+// VIEWER CHAT READ STATUS
+// Tracks the last-read timestamp per user per viewer chat context
+// ============================================
+model ViewerChatReadStatus {
+  id              String   @id @default(cuid())
+  userId          String
+  groupId         String
+  modelTemplateId String
+  lastReadAt      DateTime
+
+  // Relations
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId, modelTemplateId])
+  @@index([userId])
+  @@map("viewer_chat_read_status")
 }

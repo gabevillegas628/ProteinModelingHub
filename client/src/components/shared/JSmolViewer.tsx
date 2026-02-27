@@ -115,6 +115,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   const [chatUnread, setChatUnread] = useState(0)
   const chatBottomRef = useRef<HTMLDivElement>(null)
   const chatOpenRef = useRef(false)
+  const latestMessageTimeRef = useRef<string | null>(null)
 
   // Keep syncEnabledRef in sync with state
   useEffect(() => {
@@ -663,22 +664,24 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     }
   }
 
-  // Chat: load messages
+  // Chat: load messages and sync server-computed unread count
   const loadChat = useCallback(async () => {
     if (!groupId || !templateId) return
     try {
-      const msgs = await viewerChatApi.getViewerChat(groupId, templateId)
-      setChatMessages(msgs)
+      const { messages, unreadCount } = await viewerChatApi.getViewerChat(groupId, templateId)
+      setChatMessages(messages)
+      if (messages.length > 0) {
+        latestMessageTimeRef.current = messages[messages.length - 1].createdAt
+      }
+      // Only update the badge from the server when the chat panel is closed;
+      // while open, we immediately mark as read so the count stays 0.
       if (!chatOpenRef.current) {
-        setChatUnread(prev => {
-          // count any messages after what we last knew about
-          return msgs.length > chatMessages.length ? prev + (msgs.length - chatMessages.length) : prev
-        })
+        setChatUnread(unreadCount)
       }
     } catch {
       // silent — don't disrupt the viewer for chat errors
     }
-  }, [groupId, templateId]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [groupId, templateId])
 
   // Chat: poll every 5s when viewer is open
   useEffect(() => {
@@ -688,13 +691,19 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     return () => clearInterval(interval)
   }, [groupId, templateId, isOpen, loadChat])
 
-  // Chat: auto-scroll to bottom when panel is open and messages arrive
+  // Chat: auto-scroll to bottom when panel opens or new messages arrive while open
   useEffect(() => {
     if (chatOpen) {
       chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-      setChatUnread(0)
     }
   }, [chatMessages, chatOpen])
+
+  // Chat: mark as read on the server whenever the panel is open and messages exist
+  useEffect(() => {
+    if (!chatOpen || !groupId || !templateId || !latestMessageTimeRef.current) return
+    setChatUnread(0)
+    viewerChatApi.markViewerChatRead(groupId, templateId, latestMessageTimeRef.current).catch(() => {})
+  }, [chatOpen, chatMessages, groupId, templateId])
 
   // Chat: keep ref in sync for unread counting
   useEffect(() => { chatOpenRef.current = chatOpen }, [chatOpen])
@@ -756,7 +765,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
             )}
             {groupId && templateId && (
               <button
-                onClick={() => { setChatOpen(o => !o); setChatUnread(0) }}
+                onClick={() => setChatOpen(o => !o)}
                 className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-colors ${
                   chatOpen
                     ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
