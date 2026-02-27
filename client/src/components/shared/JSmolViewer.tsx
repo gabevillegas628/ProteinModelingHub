@@ -721,7 +721,14 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
       // silent
     } finally {
       setChatPosting(false)
-      chatInputRef.current?.focus()
+      // Defer focus until after React re-renders with disabled=false,
+      // otherwise focus is called while the textarea is still disabled.
+      setTimeout(() => {
+        if (chatInputRef.current) {
+          chatInputRef.current.style.height = 'auto'
+          chatInputRef.current.focus()
+        }
+      }, 0)
     }
   }
 
@@ -1097,9 +1104,8 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
               }
             }}
             placeholder="Message… (Enter to send, Shift+Enter for newline)"
-            disabled={chatPosting}
             rows={1}
-            className="flex-1 bg-gray-800 text-white text-sm rounded px-2.5 py-2 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 resize-none overflow-y-auto"
+            className="flex-1 bg-gray-800 text-white text-sm rounded px-2.5 py-2 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none overflow-y-auto"
             style={{ minHeight: '36px', maxHeight: '120px' }}
           />
           <button
