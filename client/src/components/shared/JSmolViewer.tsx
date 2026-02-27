@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { io } from 'socket.io-client'
 import { useAuth } from '../../context/AuthContext'
@@ -117,6 +117,34 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   const chatInputRef = useRef<HTMLTextAreaElement>(null)
   const chatOpenRef = useRef(false)
   const latestMessageTimeRef = useRef<string | null>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const isNearBottomRef = useRef(true)
+  const prevChatOpenRef = useRef(false)
+  const prevMessageCountRef = useRef(0)
+  const [newMsgCount, setNewMsgCount] = useState(0)
+
+  const CHAT_GROUP_THRESHOLD_MS = 5 * 60 * 1000
+
+  const groupedChatMessages = useMemo(() => {
+    const groups: { senderId: string; senderName: string; isOwn: boolean; firstTime: Date; messages: viewerChatApi.ViewerChatMessage[] }[] = []
+    for (const msg of chatMessages) {
+      const isOwn = msg.user.id === user?.id
+      const msgTime = new Date(msg.createdAt)
+      const last = groups[groups.length - 1]
+      if (last && last.senderId === msg.user.id && msgTime.getTime() - last.firstTime.getTime() < CHAT_GROUP_THRESHOLD_MS) {
+        last.messages.push(msg)
+      } else {
+        groups.push({
+          senderId: msg.user.id,
+          senderName: isOwn ? 'You' : `${msg.user.firstName} ${msg.user.lastName}`,
+          isOwn,
+          firstTime: msgTime,
+          messages: [msg],
+        })
+      }
+    }
+    return groups
+  }, [chatMessages, user?.id])
 
   // Keep syncEnabledRef in sync with state
   useEffect(() => {
@@ -670,10 +698,18 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     if (!groupId || !templateId) return
     try {
       const { messages, unreadCount } = await viewerChatApi.getViewerChat(groupId, templateId)
-      setChatMessages(messages)
       if (messages.length > 0) {
         latestMessageTimeRef.current = messages[messages.length - 1].createdAt
       }
+      setChatMessages(prev => {
+        // Return the same reference when no new messages have arrived so
+        // dependent effects (auto-scroll) don't fire on every poll cycle.
+        if (
+          prev.length === messages.length &&
+          prev[prev.length - 1]?.id === messages[messages.length - 1]?.id
+        ) return prev
+        return messages
+      })
       // Only update the badge from the server when the chat panel is closed;
       // while open, we immediately mark as read so the count stays 0.
       if (!chatOpenRef.current) {
@@ -695,8 +731,22 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   // Chat: auto-scroll to bottom when panel opens or new messages arrive while open
   useEffect(() => {
     if (chatOpen) {
-      chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+      const arrivedCount = chatMessages.length - prevMessageCountRef.current
+      if (!prevChatOpenRef.current) {
+        // Panel just opened — always scroll, reset any stale pill count
+        chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+        setNewMsgCount(0)
+      } else if (isNearBottomRef.current) {
+        // Already at the bottom — scroll to keep up, no pill needed
+        chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+        setNewMsgCount(0)
+      } else if (arrivedCount > 0) {
+        // Scrolled up and new messages arrived — show pill instead of scrolling
+        setNewMsgCount(prev => prev + arrivedCount)
+      }
     }
+    prevChatOpenRef.current = chatOpen
+    prevMessageCountRef.current = chatMessages.length
   }, [chatMessages, chatOpen])
 
   // Chat: mark as read on the server whenever the panel is open and messages exist
@@ -715,6 +765,8 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     try {
       setChatPosting(true)
       const msg = await viewerChatApi.postViewerChat(groupId, templateId, chatInput.trim())
+      isNearBottomRef.current = true  // always scroll to own sent message
+      setNewMsgCount(0)
       setChatMessages(prev => [...prev, msg])
       setChatInput('')
     } catch {
@@ -1063,28 +1115,55 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
         </div>
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto p-3 space-y-2">
-          {chatMessages.length === 0 && (
-            <p className="text-gray-500 text-sm text-center mt-6">No messages yet. Say something!</p>
-          )}
-          {chatMessages.map(msg => {
-            const isOwn = msg.user.id === user?.id
-            return (
-              <div key={msg.id} className={`flex flex-col ${isOwn ? 'items-end' : 'items-start'}`}>
-                {!isOwn && (
-                  <span className="text-gray-400 text-xs mb-0.5 px-1">
-                    {msg.user.firstName} {msg.user.lastName}
+        <div className="flex-1 relative min-h-0">
+          <div
+            ref={messagesContainerRef}
+            className="absolute inset-0 overflow-y-auto p-3 space-y-2"
+            onScroll={() => {
+              const el = messagesContainerRef.current
+              if (!el) return
+              const near = el.scrollHeight - el.scrollTop - el.clientHeight < 80
+              isNearBottomRef.current = near
+              if (near) setNewMsgCount(0)
+            }}
+          >
+            {chatMessages.length === 0 && (
+              <p className="text-gray-500 text-sm text-center mt-6">No messages yet. Say something!</p>
+            )}
+            {groupedChatMessages.map((group, gi) => {
+              const label = group.firstTime.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+              return (
+                <div key={gi} className={`flex flex-col gap-1 ${gi > 0 ? 'mt-3' : ''} ${group.isOwn ? 'items-end' : 'items-start'}`}>
+                  <span className="text-gray-400 text-xs px-1">
+                    {group.senderName} &middot; {label}
                   </span>
-                )}
-                <div className={`max-w-[85%] px-3 py-2 rounded-lg text-sm wrap-break-word ${
-                  isOwn ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-100'
-                }`}>
-                  {msg.content}
+                  {group.messages.map(msg => (
+                    <div key={msg.id} className={`max-w-[85%] px-3 py-2 rounded-lg text-sm wrap-break-word ${
+                      group.isOwn ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-100'
+                    }`}>
+                      {msg.content}
+                    </div>
+                  ))}
                 </div>
-              </div>
-            )
-          })}
-          <div ref={chatBottomRef} />
+              )
+            })}
+            <div ref={chatBottomRef} />
+          </div>
+          {newMsgCount > 0 && (
+            <button
+              onClick={() => {
+                isNearBottomRef.current = true
+                setNewMsgCount(0)
+                chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+              }}
+              className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-1.5 px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white text-xs font-medium rounded-full shadow-lg transition-colors whitespace-nowrap"
+            >
+              <svg className="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" />
+              </svg>
+              {newMsgCount} new {newMsgCount === 1 ? 'message' : 'messages'}
+            </button>
+          )}
         </div>
 
         {/* Input */}
