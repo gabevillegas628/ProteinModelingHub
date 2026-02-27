@@ -114,6 +114,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   const [chatPosting, setChatPosting] = useState(false)
   const [chatUnread, setChatUnread] = useState(0)
   const chatBottomRef = useRef<HTMLDivElement>(null)
+  const chatInputRef = useRef<HTMLTextAreaElement>(null)
   const chatOpenRef = useRef(false)
   const latestMessageTimeRef = useRef<string | null>(null)
 
@@ -720,6 +721,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
       // silent
     } finally {
       setChatPosting(false)
+      chatInputRef.current?.focus()
     }
   }
 
@@ -1081,6 +1083,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
         {/* Input */}
         <form onSubmit={handleChatPost} className="flex gap-2 p-2.5 border-t border-gray-700 shrink-0 items-end">
           <textarea
+            ref={chatInputRef}
             value={chatInput}
             onChange={e => {
               setChatInput(e.target.value)
