@@ -20,6 +20,12 @@ enum SubmissionStatus {
   APPROVED
 }
 
+enum ApplicationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 // ============================================
 // USER
 // ============================================
@@ -79,6 +85,14 @@ model Group {
   proteinPdbId           String    // PDB identifier, e.g., "1ABC"
   proteinName            String    // Display name, e.g., "Hemoglobin"
   lastReviewRequestedAt  DateTime? // When students last requested instructor review
+  // WSSP Application Fields (populated on approval)
+  wsspSchoolNumber        String?
+  schoolName              String?
+  cloneNumber             String?
+  sequenceIdentity        String?
+  teacherName             String?
+  teacherEmail            String?
+  researchArticleCitation String?
   createdAt              DateTime  @default(now())
   updatedAt              DateTime  @updatedAt
 
@@ -90,8 +104,47 @@ model Group {
   messageReadStatus      MessageReadStatus[]
   viewerChats            ViewerChat[]
   viewerChatReadStatuses ViewerChatReadStatus[]
+  application            Application?
 
   @@map("groups")
+}
+
+// ============================================
+// APPLICATION
+// Student team application to join the program
+// ============================================
+model Application {
+  id     String            @id @default(cuid())
+  status ApplicationStatus @default(PENDING)
+
+  wsspSchoolNumber  String
+  schoolName        String
+  studentAFirstName String
+  studentALastName  String
+  studentAEmail     String
+  studentBFirstName String
+  studentBLastName  String
+  studentBEmail     String
+  teacherName       String
+  teacherEmail      String
+
+  cloneNumber             String
+  proteinName             String
+  pdbAccessionNumber      String
+  sequenceIdentity        String
+  researchArticleCitation String
+
+  pdfFileName     String
+  pdfFilePath     String
+  rejectionReason String?
+
+  groupId String? @unique
+  group   Group?  @relation(fields: [groupId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("applications")
 }
 
 // ============================================

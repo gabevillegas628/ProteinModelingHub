@@ -58,6 +58,15 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-linear-to-br from-blue-600 via-blue-700 to-blue-900 relative overflow-hidden">
+      {/* School team registration button */}
+      <div className="absolute top-4 right-4 z-20">
+        <Link
+          to="/apply"
+          className="inline-block bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700 text-white text-sm font-medium px-4 py-2 rounded-lg shadow-lg transition-colors"
+        >
+          School Team Registration
+        </Link>
+      </div>
       {/* Decorative Background Pattern */}
       <div className="absolute inset-0 overflow-hidden">
         <svg className="absolute top-0 left-0 w-full h-64 opacity-10" viewBox="0 0 800 200" preserveAspectRatio="none">
@@ -178,19 +187,13 @@ export default function Login() {
                 </button>
               </form>
 
-              <div className="mt-8 text-center space-y-3">
+              <div className="mt-8 text-center">
                 <button
                   onClick={() => setShowForgotPassword(true)}
                   className="text-gray-500 hover:text-blue-600 transition-colors text-sm"
                 >
                   Forgot your password?
                 </button>
-                <p className="text-gray-600">
-                  Don't have an account?{' '}
-                  <Link to="/register" className="text-blue-600 hover:text-blue-800 font-medium transition-colors">
-                    Register here
-                  </Link>
-                </p>
               </div>
             </div>
           </div>

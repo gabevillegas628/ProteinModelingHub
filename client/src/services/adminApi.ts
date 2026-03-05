@@ -227,6 +227,58 @@ export function executeReset(confirmationCode: string): Promise<ResetResult> {
   });
 }
 
+// ============================================
+// Applications
+// ============================================
+
+export interface Application {
+  id: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED';
+  wsspSchoolNumber: string;
+  schoolName: string;
+  studentAFirstName: string;
+  studentALastName: string;
+  studentAEmail: string;
+  studentBFirstName: string;
+  studentBLastName: string;
+  studentBEmail: string;
+  teacherName: string;
+  teacherEmail: string;
+  cloneNumber: string;
+  proteinName: string;
+  pdbAccessionNumber: string;
+  sequenceIdentity: string;
+  researchArticleCitation: string;
+  pdfFileName: string;
+  pdfFilePath: string;
+  rejectionReason: string | null;
+  groupId: string | null;
+  group: { id: string; name: string } | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export function getApplications(status?: 'PENDING' | 'APPROVED' | 'REJECTED'): Promise<Application[]> {
+  const query = status ? `?status=${status}` : '';
+  return request(`/applications${query}`);
+}
+
+export function approveApplication(id: string): Promise<{ success: boolean; groupId: string; studentAId: string; studentBId: string }> {
+  return request(`/applications/${id}/approve`, { method: 'POST' });
+}
+
+export function rejectApplication(id: string, reason?: string): Promise<{ success: boolean }> {
+  return request(`/applications/${id}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export function getApplicationFileUrl(id: string): string {
+  const token = localStorage.getItem('token');
+  return `/modeling/api/admin/applications/${id}/file?token=${token}`;
+}
+
 export async function downloadArchive(): Promise<void> {
   const token = localStorage.getItem('token');
   const response = await fetch(`${API_BASE}/nuclear-reset/archive`, {

@@ -4,8 +4,9 @@ import ModelTemplatesTab from '../components/admin/ModelTemplatesTab'
 import GroupsTab from '../components/admin/GroupsTab'
 import UsersTab from '../components/admin/UsersTab'
 import DangerZoneTab from '../components/admin/DangerZoneTab'
+import ApplicationsTab from '../components/admin/ApplicationsTab'
 
-type TabId = 'models' | 'groups' | 'users' | 'danger'
+type TabId = 'applications' | 'models' | 'groups' | 'users' | 'danger'
 
 interface Tab {
   id: TabId
@@ -14,6 +15,7 @@ interface Tab {
 }
 
 const tabs: Tab[] = [
+  { id: 'applications', label: 'Applications' },
   { id: 'models', label: 'Model Templates' },
   { id: 'groups', label: 'Groups' },
   { id: 'users', label: 'Users' },
@@ -22,7 +24,7 @@ const tabs: Tab[] = [
 
 export default function Admin() {
   const { user, logout } = useAuth()
-  const [activeTab, setActiveTab] = useState<TabId>('models')
+  const [activeTab, setActiveTab] = useState<TabId>('applications')
 
   if (!user || user.role !== 'ADMIN') {
     return (
@@ -85,6 +87,7 @@ export default function Admin() {
 
       {/* Tab Content */}
       <main className="max-w-7xl mx-auto px-4 py-6">
+        {activeTab === 'applications' && <ApplicationsTab />}
         {activeTab === 'models' && <ModelTemplatesTab />}
         {activeTab === 'groups' && <GroupsTab />}
         {activeTab === 'users' && <UsersTab />}

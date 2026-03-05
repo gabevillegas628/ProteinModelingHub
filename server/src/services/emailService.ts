@@ -3,6 +3,7 @@
 const BREVO_API_KEY = process.env.BREVO_API_KEY;
 const SENDER_EMAIL = process.env.BREVO_SENDER_EMAIL || 'noreply@example.com';
 const SENDER_NAME = process.env.BREVO_SENDER_NAME || 'Protein Model Organizer';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL;
 
 interface SendEmailParams {
   to: string;
@@ -292,6 +293,214 @@ Protein Model Organizer - Waksman Student Scholars Program
     to: instructorEmail,
     toName: instructorName,
     subject: `Review Request: ${groupName} - ${proteinName}`,
+    htmlContent,
+    textContent,
+  });
+}
+
+const EMAIL_HEADER = `
+  <div style="background: linear-gradient(135deg, #1e40af 0%, #3b82f6 100%); padding: 30px; border-radius: 12px 12px 0 0; text-align: center;">
+    <h1 style="color: white; margin: 0; font-size: 24px;">Protein Model Organizer</h1>
+    <p style="color: rgba(255,255,255,0.9); margin: 8px 0 0 0; font-size: 14px;">Waksman Student Scholars Program</p>
+  </div>
+`;
+
+const EMAIL_FOOTER = `
+  <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+  <p style="color: #9ca3af; font-size: 12px; text-align: center; margin-bottom: 0;">
+    Protein Model Organizer &bull; Waksman Student Scholars Program
+  </p>
+`;
+
+const EMAIL_BODY_OPEN = `<div style="background: #ffffff; padding: 30px; border: 1px solid #e5e7eb; border-top: none; border-radius: 0 0 12px 12px;">`;
+const EMAIL_BODY_CLOSE = `</div>`;
+
+const EMAIL_WRAP_OPEN = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"></head><body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">`;
+const EMAIL_WRAP_CLOSE = `</body></html>`;
+
+export async function sendApplicationConfirmationEmail(params: {
+  studentEmail: string;
+  studentName: string;
+  partnerName: string;
+  proteinName: string;
+  pdbAccessionNumber: string;
+  schoolName: string;
+}): Promise<boolean> {
+  const { studentEmail, studentName, partnerName, proteinName, pdbAccessionNumber, schoolName } = params;
+
+  const htmlContent = `
+    ${EMAIL_WRAP_OPEN}
+    ${EMAIL_HEADER}
+    ${EMAIL_BODY_OPEN}
+      <h2 style="color: #1e40af; margin-top: 0;">Application Received</h2>
+      <p>Hi ${studentName},</p>
+      <p>Thank you for applying to the Waksman Student Scholars Program! We've received your application and our team will review it shortly.</p>
+
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0;">
+        <p style="margin: 0 0 8px 0; font-weight: 600; color: #1e293b;">Application Summary</p>
+        <p style="margin: 0 0 4px 0; font-size: 14px; color: #475569;"><strong>School:</strong> ${schoolName}</p>
+        <p style="margin: 0 0 4px 0; font-size: 14px; color: #475569;"><strong>Partner:</strong> ${partnerName}</p>
+        <p style="margin: 0 0 4px 0; font-size: 14px; color: #475569;"><strong>Protein:</strong> ${proteinName}</p>
+        <p style="margin: 0; font-size: 14px; color: #475569;"><strong>PDB Accession:</strong> ${pdbAccessionNumber}</p>
+      </div>
+
+      <p>You will receive another email once your application has been reviewed. No further action is needed from you at this time.</p>
+      ${EMAIL_FOOTER}
+    ${EMAIL_BODY_CLOSE}
+    ${EMAIL_WRAP_CLOSE}
+  `;
+
+  const textContent = `
+Hi ${studentName},
+
+Thank you for applying to the Waksman Student Scholars Program! We've received your application and our team will review it shortly.
+
+Application Summary:
+  School: ${schoolName}
+  Partner: ${partnerName}
+  Protein: ${proteinName}
+  PDB Accession: ${pdbAccessionNumber}
+
+You will receive another email once your application has been reviewed. No further action is needed at this time.
+
+---
+Protein Model Organizer - Waksman Student Scholars Program
+  `.trim();
+
+  return sendEmail({
+    to: studentEmail,
+    toName: studentName,
+    subject: 'Application Received - Waksman Student Scholars Program',
+    htmlContent,
+    textContent,
+  });
+}
+
+export async function sendAdminNewApplicationEmail(params: {
+  schoolName: string;
+  wsspSchoolNumber: string;
+  studentAName: string;
+  studentAEmail: string;
+  studentBName: string;
+  studentBEmail: string;
+  proteinName: string;
+  pdbAccessionNumber: string;
+  applicationId: string;
+}): Promise<boolean> {
+  if (!ADMIN_EMAIL) return false;
+
+  const { schoolName, wsspSchoolNumber, studentAName, studentAEmail, studentBName, studentBEmail, proteinName, pdbAccessionNumber } = params;
+
+  const htmlContent = `
+    ${EMAIL_WRAP_OPEN}
+    ${EMAIL_HEADER}
+    ${EMAIL_BODY_OPEN}
+      <h2 style="color: #1e40af; margin-top: 0;">New Application Submitted</h2>
+      <p>A new student team has submitted an application for review.</p>
+
+      <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 20px 0;">
+        <p style="margin: 0 0 8px 0; font-size: 14px; color: #475569;"><strong>School:</strong> ${schoolName} (WSSP #${wsspSchoolNumber})</p>
+        <p style="margin: 0 0 8px 0; font-size: 14px; color: #475569;"><strong>Student A:</strong> ${studentAName} &lt;${studentAEmail}&gt;</p>
+        <p style="margin: 0 0 8px 0; font-size: 14px; color: #475569;"><strong>Student B:</strong> ${studentBName} &lt;${studentBEmail}&gt;</p>
+        <p style="margin: 0 0 4px 0; font-size: 14px; color: #475569;"><strong>Protein:</strong> ${proteinName}</p>
+        <p style="margin: 0; font-size: 14px; color: #475569;"><strong>PDB Accession:</strong> ${pdbAccessionNumber}</p>
+      </div>
+
+      <p>Log in to the admin dashboard to review and approve or reject this application.</p>
+      ${EMAIL_FOOTER}
+    ${EMAIL_BODY_CLOSE}
+    ${EMAIL_WRAP_CLOSE}
+  `;
+
+  const textContent = `
+New Application Submitted
+
+School: ${schoolName} (WSSP #${wsspSchoolNumber})
+Student A: ${studentAName} <${studentAEmail}>
+Student B: ${studentBName} <${studentBEmail}>
+Protein: ${proteinName}
+PDB Accession: ${pdbAccessionNumber}
+
+Log in to the admin dashboard to review this application.
+
+---
+Protein Model Organizer - Waksman Student Scholars Program
+  `.trim();
+
+  return sendEmail({
+    to: ADMIN_EMAIL,
+    subject: `New Application: ${schoolName} - ${proteinName}`,
+    htmlContent,
+    textContent,
+  });
+}
+
+export async function sendStudentWelcomeEmail(params: {
+  studentEmail: string;
+  studentFirstName: string;
+  partnerFullName: string;
+  groupName: string;
+  proteinName: string;
+  pdbAccessionNumber: string;
+  resetToken: string;
+}): Promise<boolean> {
+  const { studentEmail, studentFirstName, partnerFullName, groupName, proteinName, pdbAccessionNumber, resetToken } = params;
+  const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+  const setupUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
+
+  const htmlContent = `
+    ${EMAIL_WRAP_OPEN}
+    ${EMAIL_HEADER}
+    ${EMAIL_BODY_OPEN}
+      <h2 style="color: #1e40af; margin-top: 0;">Welcome to the Program!</h2>
+      <p>Hi ${studentFirstName},</p>
+      <p>Your application has been approved. You and your partner <strong>${partnerFullName}</strong> now have access to the Protein Model Organizer.</p>
+
+      <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 8px; padding: 16px; margin: 20px 0;">
+        <p style="margin: 0 0 8px 0; font-weight: 600; color: #166534;">Your Project</p>
+        <p style="margin: 0 0 4px 0; font-size: 14px; color: #15803d;"><strong>Group:</strong> ${groupName}</p>
+        <p style="margin: 0 0 4px 0; font-size: 14px; color: #15803d;"><strong>Protein:</strong> ${proteinName}</p>
+        <p style="margin: 0; font-size: 14px; color: #15803d;"><strong>PDB ID:</strong> ${pdbAccessionNumber}</p>
+      </div>
+
+      <p>To get started, click the button below to set your password. This link is valid for <strong>24 hours</strong>.</p>
+
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${setupUrl}" style="display: inline-block; background-color: #1e40af; color: white; padding: 14px 32px; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 16px;">
+          Set Your Password
+        </a>
+      </div>
+
+      <p style="color: #6b7280; font-size: 14px;">
+        If the button doesn't work, copy and paste this link into your browser:<br>
+        <a href="${setupUrl}" style="color: #3b82f6; word-break: break-all;">${setupUrl}</a>
+      </p>
+      ${EMAIL_FOOTER}
+    ${EMAIL_BODY_CLOSE}
+    ${EMAIL_WRAP_CLOSE}
+  `;
+
+  const textContent = `
+Hi ${studentFirstName},
+
+Your application has been approved! You and your partner ${partnerFullName} now have access to the Protein Model Organizer.
+
+Your Project:
+  Group: ${groupName}
+  Protein: ${proteinName}
+  PDB ID: ${pdbAccessionNumber}
+
+Set your password using the link below (valid for 24 hours):
+${setupUrl}
+
+---
+Protein Model Organizer - Waksman Student Scholars Program
+  `.trim();
+
+  return sendEmail({
+    to: studentEmail,
+    toName: studentFirstName,
+    subject: 'Your Application Was Approved - Set Your Password',
     htmlContent,
     textContent,
   });

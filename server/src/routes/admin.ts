@@ -1,15 +1,18 @@
 import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import archiver from 'archiver';
 import fs from 'fs';
 import path from 'path';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
+import { sendStudentWelcomeEmail } from '../services/emailService.js';
 
 // File storage paths
 const UPLOAD_BASE = path.join(process.cwd(), 'uploads');
 const MODELS_DIR = path.join(UPLOAD_BASE, 'models');
 const LITERATURE_DIR = path.join(UPLOAD_BASE, 'literature');
+const APPLICATIONS_DIR = path.join(UPLOAD_BASE, 'applications');
 
 // Store confirmation codes temporarily (in production, use Redis or similar)
 const confirmationCodes = new Map<string, { code: string; expiresAt: Date }>();
@@ -732,6 +735,227 @@ router.post('/nuclear-reset/execute', async (req: AuthRequest, res: Response) =>
   } catch (error) {
     console.error('Error executing nuclear reset:', error);
     res.status(500).json({ error: 'Failed to execute reset' });
+  }
+});
+
+// ============================================
+// APPLICATIONS
+// ============================================
+
+// Get all applications (with optional status filter)
+router.get('/applications', async (req: Request, res: Response) => {
+  try {
+    const { status } = req.query;
+    const where = status ? { status: status as 'PENDING' | 'APPROVED' | 'REJECTED' } : {};
+
+    const applications = await prisma.application.findMany({
+      where,
+      include: {
+        group: { select: { id: true, name: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json(applications);
+  } catch (error) {
+    console.error('Error fetching applications:', error);
+    res.status(500).json({ error: 'Failed to fetch applications' });
+  }
+});
+
+// Serve application PDF
+router.get('/applications/:id/file', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const application = await prisma.application.findUnique({
+      where: { id },
+      select: { pdfFilePath: true, pdfFileName: true },
+    });
+
+    if (!application) {
+      res.status(404).json({ error: 'Application not found' });
+      return;
+    }
+
+    const fullPath = path.join(APPLICATIONS_DIR, application.pdfFilePath);
+    if (!fs.existsSync(fullPath)) {
+      res.status(404).json({ error: 'PDF file not found' });
+      return;
+    }
+
+    res.setHeader('Content-Disposition', `inline; filename="${application.pdfFileName}"`);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.sendFile(fullPath);
+  } catch (error) {
+    console.error('Error serving application file:', error);
+    res.status(500).json({ error: 'Failed to serve file' });
+  }
+});
+
+// Approve application — creates student accounts, group, and sends welcome emails
+router.post('/applications/:id/approve', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const application = await prisma.application.findUnique({
+      where: { id },
+    });
+
+    if (!application) {
+      res.status(404).json({ error: 'Application not found' });
+      return;
+    }
+
+    if (application.status !== 'PENDING') {
+      res.status(400).json({ error: 'Only PENDING applications can be approved' });
+      return;
+    }
+
+    // Check neither student email is already a registered user
+    const existingUser = await prisma.user.findFirst({
+      where: { email: { in: [application.studentAEmail, application.studentBEmail] } },
+    });
+    if (existingUser) {
+      res.status(409).json({ error: 'One or more student email addresses are already registered' });
+      return;
+    }
+
+    const placeholderHashA = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 12);
+    const placeholderHashB = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 12);
+    const groupName = `${application.schoolName} - ${application.proteinName}`;
+
+    const { studentA, studentB, group } = await prisma.$transaction(async (tx) => {
+      const studentA = await tx.user.create({
+        data: {
+          email: application.studentAEmail,
+          password: placeholderHashA,
+          firstName: application.studentAFirstName,
+          lastName: application.studentALastName,
+          role: 'STUDENT',
+          isApproved: true,
+        },
+      });
+
+      const studentB = await tx.user.create({
+        data: {
+          email: application.studentBEmail,
+          password: placeholderHashB,
+          firstName: application.studentBFirstName,
+          lastName: application.studentBLastName,
+          role: 'STUDENT',
+          isApproved: true,
+        },
+      });
+
+      const group = await tx.group.create({
+        data: {
+          name: groupName,
+          proteinPdbId: application.pdbAccessionNumber,
+          proteinName: application.proteinName,
+          wsspSchoolNumber: application.wsspSchoolNumber,
+          schoolName: application.schoolName,
+          cloneNumber: application.cloneNumber,
+          sequenceIdentity: application.sequenceIdentity,
+          teacherName: application.teacherName,
+          teacherEmail: application.teacherEmail,
+          researchArticleCitation: application.researchArticleCitation,
+        },
+      });
+
+      await tx.groupMember.createMany({
+        data: [
+          { userId: studentA.id, groupId: group.id },
+          { userId: studentB.id, groupId: group.id },
+        ],
+      });
+
+      await tx.application.update({
+        where: { id: application.id },
+        data: { status: 'APPROVED', groupId: group.id },
+      });
+
+      return { studentA, studentB, group };
+    });
+
+    // Generate 24-hour password setup tokens outside the transaction
+    const TOKEN_EXPIRY_HOURS = 24;
+    const tokenA = crypto.randomBytes(32).toString('hex');
+    const tokenB = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + TOKEN_EXPIRY_HOURS * 60 * 60 * 1000);
+
+    await prisma.user.update({
+      where: { id: studentA.id },
+      data: { passwordResetToken: tokenA, passwordResetExpires: expiresAt },
+    });
+
+    await prisma.user.update({
+      where: { id: studentB.id },
+      data: { passwordResetToken: tokenB, passwordResetExpires: expiresAt },
+    });
+
+    const studentBFullName = `${application.studentBFirstName} ${application.studentBLastName}`;
+    const studentAFullName = `${application.studentAFirstName} ${application.studentALastName}`;
+
+    sendStudentWelcomeEmail({
+      studentEmail: application.studentAEmail,
+      studentFirstName: application.studentAFirstName,
+      partnerFullName: studentBFullName,
+      groupName,
+      proteinName: application.proteinName,
+      pdbAccessionNumber: application.pdbAccessionNumber,
+      resetToken: tokenA,
+    }).catch((err) => console.error('Failed to send welcome email to student A:', err));
+
+    sendStudentWelcomeEmail({
+      studentEmail: application.studentBEmail,
+      studentFirstName: application.studentBFirstName,
+      partnerFullName: studentAFullName,
+      groupName,
+      proteinName: application.proteinName,
+      pdbAccessionNumber: application.pdbAccessionNumber,
+      resetToken: tokenB,
+    }).catch((err) => console.error('Failed to send welcome email to student B:', err));
+
+    res.json({
+      success: true,
+      groupId: group.id,
+      studentAId: studentA.id,
+      studentBId: studentB.id,
+    });
+  } catch (error) {
+    console.error('Error approving application:', error);
+    res.status(500).json({ error: 'Failed to approve application' });
+  }
+});
+
+// Reject application
+router.post('/applications/:id/reject', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const application = await prisma.application.findUnique({
+      where: { id },
+    });
+
+    if (!application) {
+      res.status(404).json({ error: 'Application not found' });
+      return;
+    }
+
+    if (application.status !== 'PENDING') {
+      res.status(400).json({ error: 'Only PENDING applications can be rejected' });
+      return;
+    }
+
+    const { reason } = req.body as { reason?: string };
+
+    await prisma.application.update({
+      where: { id },
+      data: { status: 'REJECTED', rejectionReason: reason || null },
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error rejecting application:', error);
+    res.status(500).json({ error: 'Failed to reject application' });
   }
 });
 

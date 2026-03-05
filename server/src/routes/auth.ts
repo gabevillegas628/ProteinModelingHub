@@ -2,9 +2,38 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt, { SignOptions } from 'jsonwebtoken';
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
+import multer from 'multer';
 import { Role } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { sendPasswordResetEmail } from '../services/emailService.js';
+import {
+  sendPasswordResetEmail,
+  sendApplicationConfirmationEmail,
+  sendAdminNewApplicationEmail,
+} from '../services/emailService.js';
+
+const APPLICATIONS_DIR = path.join(process.cwd(), 'uploads', 'applications');
+if (!fs.existsSync(APPLICATIONS_DIR)) {
+  fs.mkdirSync(APPLICATIONS_DIR, { recursive: true });
+}
+
+const applicationUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, APPLICATIONS_DIR),
+    filename: (_req, _file, cb) => {
+      cb(null, `${Date.now()}-${crypto.randomBytes(8).toString('hex')}.pdf`);
+    },
+  }),
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF files are allowed'));
+    }
+  },
+  limits: { fileSize: 10 * 1024 * 1024 },
+});
 
 const router = Router();
 
@@ -303,6 +332,167 @@ router.post('/reset-password', async (req: Request<{}, {}, { token: string; pass
   } catch (error) {
     console.error('Reset password error:', error);
     res.status(500).json({ error: 'Failed to reset password' });
+  }
+});
+
+// Submit application
+router.post('/apply', applicationUpload.single('pdfFile'), async (req: Request, res: Response) => {
+  try {
+    const {
+      wsspSchoolNumber,
+      schoolName,
+      studentAFirstName,
+      studentALastName,
+      studentAEmail,
+      studentBFirstName,
+      studentBLastName,
+      studentBEmail,
+      teacherName,
+      teacherEmail,
+      cloneNumber,
+      proteinName,
+      pdbAccessionNumber,
+      sequenceIdentity,
+      researchArticleCitation,
+    } = req.body;
+
+    const requiredFields = {
+      wsspSchoolNumber,
+      schoolName,
+      studentAFirstName,
+      studentALastName,
+      studentAEmail,
+      studentBFirstName,
+      studentBLastName,
+      studentBEmail,
+      teacherName,
+      teacherEmail,
+      cloneNumber,
+      proteinName,
+      pdbAccessionNumber,
+      sequenceIdentity,
+      researchArticleCitation,
+    };
+
+    const missing = Object.entries(requiredFields)
+      .filter(([, v]) => !v || (v as string).trim() === '')
+      .map(([k]) => k);
+
+    if (missing.length > 0) {
+      if (req.file) fs.unlinkSync(path.join(APPLICATIONS_DIR, req.file.filename));
+      res.status(400).json({ error: `Missing required fields: ${missing.join(', ')}` });
+      return;
+    }
+
+    if (!req.file) {
+      res.status(400).json({ error: 'A PDF description of the protein function is required' });
+      return;
+    }
+
+    const emailA = (studentAEmail as string).trim().toLowerCase();
+    const emailB = (studentBEmail as string).trim().toLowerCase();
+
+    if (emailA === emailB) {
+      if (req.file) fs.unlinkSync(path.join(APPLICATIONS_DIR, req.file.filename));
+      res.status(400).json({ error: 'Student A and Student B must have different email addresses' });
+      return;
+    }
+
+    if (!/^[A-Za-z0-9]{4}$/.test((pdbAccessionNumber as string).trim())) {
+      if (req.file) fs.unlinkSync(path.join(APPLICATIONS_DIR, req.file.filename));
+      res.status(400).json({ error: 'PDB Accession Number must be exactly 4 alphanumeric characters' });
+      return;
+    }
+
+    // Check for existing accounts with these emails
+    const existingUser = await prisma.user.findFirst({
+      where: { email: { in: [emailA, emailB] } },
+    });
+    if (existingUser) {
+      fs.unlinkSync(path.join(APPLICATIONS_DIR, req.file.filename));
+      res.status(409).json({ error: 'An account already exists for one of the student emails provided' });
+      return;
+    }
+
+    // Check for existing pending/approved applications with these emails
+    const existingApp = await prisma.application.findFirst({
+      where: {
+        status: { in: ['PENDING', 'APPROVED'] },
+        OR: [
+          { studentAEmail: { in: [emailA, emailB] } },
+          { studentBEmail: { in: [emailA, emailB] } },
+        ],
+      },
+    });
+    if (existingApp) {
+      fs.unlinkSync(path.join(APPLICATIONS_DIR, req.file.filename));
+      res.status(409).json({ error: 'An application with one of these email addresses is already on file' });
+      return;
+    }
+
+    const application = await prisma.application.create({
+      data: {
+        wsspSchoolNumber: (wsspSchoolNumber as string).trim(),
+        schoolName: (schoolName as string).trim(),
+        studentAFirstName: (studentAFirstName as string).trim(),
+        studentALastName: (studentALastName as string).trim(),
+        studentAEmail: emailA,
+        studentBFirstName: (studentBFirstName as string).trim(),
+        studentBLastName: (studentBLastName as string).trim(),
+        studentBEmail: emailB,
+        teacherName: (teacherName as string).trim(),
+        teacherEmail: (teacherEmail as string).trim().toLowerCase(),
+        cloneNumber: (cloneNumber as string).trim(),
+        proteinName: (proteinName as string).trim(),
+        pdbAccessionNumber: (pdbAccessionNumber as string).trim().toUpperCase(),
+        sequenceIdentity: (sequenceIdentity as string).trim(),
+        researchArticleCitation: (researchArticleCitation as string).trim(),
+        pdfFileName: req.file.originalname,
+        pdfFilePath: req.file.filename,
+      },
+    });
+
+    // Send confirmation emails (non-blocking)
+    const studentAFullName = `${(studentAFirstName as string).trim()} ${(studentALastName as string).trim()}`;
+    const studentBFullName = `${(studentBFirstName as string).trim()} ${(studentBLastName as string).trim()}`;
+
+    sendApplicationConfirmationEmail({
+      studentEmail: emailA,
+      studentName: (studentAFirstName as string).trim(),
+      partnerName: studentBFullName,
+      proteinName: (proteinName as string).trim(),
+      pdbAccessionNumber: (pdbAccessionNumber as string).trim().toUpperCase(),
+      schoolName: (schoolName as string).trim(),
+    }).catch((err) => console.error('Failed to send confirmation email to student A:', err));
+
+    sendApplicationConfirmationEmail({
+      studentEmail: emailB,
+      studentName: (studentBFirstName as string).trim(),
+      partnerName: studentAFullName,
+      proteinName: (proteinName as string).trim(),
+      pdbAccessionNumber: (pdbAccessionNumber as string).trim().toUpperCase(),
+      schoolName: (schoolName as string).trim(),
+    }).catch((err) => console.error('Failed to send confirmation email to student B:', err));
+
+    sendAdminNewApplicationEmail({
+      schoolName: (schoolName as string).trim(),
+      wsspSchoolNumber: (wsspSchoolNumber as string).trim(),
+      studentAName: studentAFullName,
+      studentAEmail: emailA,
+      studentBName: studentBFullName,
+      studentBEmail: emailB,
+      proteinName: (proteinName as string).trim(),
+      pdbAccessionNumber: (pdbAccessionNumber as string).trim().toUpperCase(),
+      applicationId: application.id,
+    }).catch((err) => console.error('Failed to send admin notification email:', err));
+
+    res.status(201).json({ message: 'Application submitted successfully' });
+  } catch (error) {
+    if (req.file) {
+      fs.unlink(path.join(APPLICATIONS_DIR, req.file.filename), () => {});
+    }
+    console.error('Application submission error:', error);
+    res.status(500).json({ error: 'Failed to submit application' });
   }
 });
 
