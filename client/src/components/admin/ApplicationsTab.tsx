@@ -13,6 +13,7 @@ export default function ApplicationsTab() {
   const [rejectingId, setRejectingId] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('')
   const [previewId, setPreviewId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   useEffect(() => {
     loadApplications()
@@ -62,6 +63,20 @@ export default function ApplicationsTab() {
   const openRejectModal = (id: string) => {
     setRejectingId(id)
     setRejectReason('')
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!deletingId) return
+    setActionLoading(deletingId)
+    try {
+      await adminApi.deleteApplication(deletingId)
+      setDeletingId(null)
+      loadApplications()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to delete application')
+    } finally {
+      setActionLoading(null)
+    }
   }
 
   const pendingCount = applications.filter(a => a.status === 'PENDING').length
@@ -207,6 +222,13 @@ export default function ApplicationsTab() {
                         </button>
                       </>
                     )}
+                    <button
+                      onClick={() => setDeletingId(app.id)}
+                      disabled={actionLoading === app.id}
+                      className="px-3 py-1.5 text-xs font-medium text-gray-500 bg-white border border-gray-300 rounded-lg hover:bg-red-50 hover:text-red-600 hover:border-red-300 transition-colors disabled:opacity-50"
+                    >
+                      Delete
+                    </button>
                   </div>
                 </div>
 
@@ -286,6 +308,35 @@ export default function ApplicationsTab() {
       )}
 
       {/* Reject modal */}
+      {deletingId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Application</h3>
+            <p className="text-sm text-gray-500 mb-6">
+              This will permanently delete the application and its PDF. This cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setDeletingId(null)}
+                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                disabled={actionLoading === deletingId}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-2"
+              >
+                {actionLoading === deletingId ? (
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : null}
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {rejectingId && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">

@@ -274,6 +274,10 @@ export function rejectApplication(id: string, reason?: string): Promise<{ succes
   });
 }
 
+export function deleteApplication(id: string): Promise<{ success: boolean }> {
+  return request(`/applications/${id}`, { method: 'DELETE' });
+}
+
 export function getApplicationFileUrl(id: string): string {
   const token = localStorage.getItem('token');
   return `/modeling/api/admin/applications/${id}/file?token=${token}`;

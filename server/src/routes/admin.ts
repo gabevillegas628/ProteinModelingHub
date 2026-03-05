@@ -823,6 +823,24 @@ router.post('/applications/:id/approve', async (req: Request, res: Response) => 
     const placeholderHashB = await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 12);
     const groupName = `${application.schoolName} - ${application.proteinName}`;
 
+    // Copy the application PDF into the literature directory before the transaction
+    // so we can include the literature record atomically.
+    const literatureFileName = `${Date.now()}-${crypto.randomBytes(8).toString('hex')}.pdf`;
+    const appPdfSrc = path.join(APPLICATIONS_DIR, application.pdfFilePath);
+    const litPdfDest = path.join(LITERATURE_DIR, literatureFileName);
+    let pdfFileSize = 0;
+    let pdfCopied = false;
+    if (fs.existsSync(appPdfSrc)) {
+      try {
+        fs.copyFileSync(appPdfSrc, litPdfDest);
+        pdfFileSize = fs.statSync(litPdfDest).size;
+        pdfCopied = true;
+      } catch (err) {
+        console.error('Failed to copy application PDF to literature dir:', err);
+      }
+    }
+
+    let transactionSucceeded = false;
     const { studentA, studentB, group } = await prisma.$transaction(async (tx) => {
       const studentA = await tx.user.create({
         data: {
@@ -873,7 +891,27 @@ router.post('/applications/:id/approve', async (req: Request, res: Response) => 
         data: { status: 'APPROVED', groupId: group.id },
       });
 
+      if (pdfCopied) {
+        await tx.literature.create({
+          data: {
+            groupId: group.id,
+            uploadedById: studentA.id,
+            title: `${application.proteinName} - Protein Function Description`,
+            fileName: application.pdfFileName,
+            filePath: literatureFileName,
+            fileSize: pdfFileSize,
+          },
+        });
+      }
+
+      transactionSucceeded = true;
       return { studentA, studentB, group };
+    }).catch((err) => {
+      // Clean up copied file if transaction failed
+      if (pdfCopied && !transactionSucceeded && fs.existsSync(litPdfDest)) {
+        try { fs.unlinkSync(litPdfDest); } catch { /* ignore */ }
+      }
+      throw err;
     });
 
     // Generate 24-hour password setup tokens outside the transaction
@@ -924,6 +962,39 @@ router.post('/applications/:id/approve', async (req: Request, res: Response) => 
   } catch (error) {
     console.error('Error approving application:', error);
     res.status(500).json({ error: 'Failed to approve application' });
+  }
+});
+
+// Delete application (any status) — removes DB record and PDF file
+router.delete('/applications/:id', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+    const application = await prisma.application.findUnique({
+      where: { id },
+      select: { pdfFilePath: true },
+    });
+
+    if (!application) {
+      res.status(404).json({ error: 'Application not found' });
+      return;
+    }
+
+    await prisma.application.delete({ where: { id } });
+
+    // Clean up PDF from disk (best-effort)
+    const fullPath = path.join(APPLICATIONS_DIR, application.pdfFilePath);
+    if (fs.existsSync(fullPath)) {
+      try {
+        fs.unlinkSync(fullPath);
+      } catch (err) {
+        console.error('Failed to delete application PDF:', err);
+      }
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting application:', error);
+    res.status(500).json({ error: 'Failed to delete application' });
   }
 });
 
