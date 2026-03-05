@@ -435,10 +435,6 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     runScript(colorCommands[scheme])
   }
 
-  const handleReset = () => {
-    runScript('reset; zoom 100')
-  }
-
   const handleZoom = (direction: 'in' | 'out') => {
     runScript(direction === 'in' ? 'zoom *1.2' : 'zoom /1.2')
   }
@@ -943,16 +939,10 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
                       Zoom Out
                     </button>
                   </div>
-                  <button
-                    onClick={() => setShowResetConfirm(true)}
-                    className="w-full mt-2 px-3 py-2 bg-white border border-red-300 rounded text-sm font-medium text-red-600 hover:bg-red-50"
-                  >
-                    Reset
-                  </button>
                   {/* Reset to Student View - only show if we have original state */}
                   {hasOriginalState && (
                     <button
-                      onClick={handleResetToStudentView}
+                      onClick={() => setShowResetConfirm(true)}
                       className="w-full mt-2 px-3 py-2 bg-amber-500 text-white rounded text-sm font-medium hover:bg-amber-600 flex items-center justify-center gap-2"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1188,7 +1178,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
               Cancel
             </button>
             <button
-              onClick={() => { handleReset(); setShowResetConfirm(false) }}
+              onClick={() => { handleResetToStudentView(); setShowResetConfirm(false) }}
               className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700"
             >
               Reset
