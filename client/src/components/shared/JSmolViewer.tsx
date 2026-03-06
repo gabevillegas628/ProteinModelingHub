@@ -161,7 +161,9 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     // Use just the file ID (last path segment, no extension) as the room key so that
     // students (/models/file/<id>.png) and instructors (/submissions/file/<id>.png)
     // resolve to the same room when viewing the same submission.
-    const fileId = fileUrl.split('?')[0].split('/').pop()?.replace(/\.png$/, '') ?? fileUrl
+    const fileId = fileUrl
+      ? fileUrl.split('?')[0].split('/').pop()?.replace(/\.png$/, '') ?? fileUrl
+      : `new::${templateId}`
     const syncRoomId = `${groupId}::${fileId}`
 
     // Reset passive-period state on every (re-)connect.
@@ -231,7 +233,9 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   useEffect(() => {
     if (!isOpen || !groupId || !syncEnabled) return
 
-    const fileId = fileUrl.split('?')[0].split('/').pop()?.replace(/\.png$/, '') ?? fileUrl
+    const fileId = fileUrl
+      ? fileUrl.split('?')[0].split('/').pop()?.replace(/\.png$/, '') ?? fileUrl
+      : `new::${templateId}`
     const syncRoomId = `${groupId}::${fileId}`
 
     const interval = setInterval(() => {
@@ -329,15 +333,26 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
                 set platformSpeed 3;
               `
 
-              // Load the PNGJ file - URL now has .png extension for JSmol file type detection
+              // Load the model - either from a saved PNGJ file or fresh from RCSB PDB
+              const loadCommand = fileUrl
+                ? `load "${fileUrl}";`
+                : proteinPdbId
+                  ? `load =${proteinPdbId}; cartoon only; color structure;`
+                  : ''
+
               window.Jmol.script(appletRef.current!, `
                 ${baseSettings}
-                load "${fileUrl}";
+                ${loadCommand}
               `)
 
-              // Store that we loaded from a file (for reset functionality)
-              setHasOriginalState(true)
-              originalStateRef.current = { stateCommands: `load "${fileUrl}";` }
+              // Store original state for reset functionality
+              if (fileUrl) {
+                setHasOriginalState(true)
+                originalStateRef.current = { stateCommands: `load "${fileUrl}";` }
+              } else if (proteinPdbId) {
+                setHasOriginalState(true)
+                originalStateRef.current = { stateCommands: `load =${proteinPdbId}; cartoon only; color structure;` }
+              }
             }
           }, 500)
         }
@@ -948,7 +963,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
                       </svg>
-                      Reset to Student View
+                      {fileUrl ? 'Reset to Student View' : `Reset to PDB`}
                     </button>
                   )}
                 </div>

@@ -41,6 +41,7 @@ export default function ModelsTab() {
   const [editingProtein, setEditingProtein] = useState(false)
   const [proteinForm, setProteinForm] = useState({ pdbId: '', name: '' })
   const [savingProtein, setSavingProtein] = useState(false)
+  const [newPickerOpen, setNewPickerOpen] = useState<string | null>(null)
 
   useEffect(() => {
     loadModels()
@@ -163,6 +164,17 @@ export default function ModelsTab() {
     setViewer({
       isOpen: true,
       fileUrl: studentApi.getModelFileUrl(submissionId),
+      modelName,
+      proteinPdbId: data?.group.proteinPdbId,
+      templateId
+    })
+  }
+
+  const openNewViewer = (templateId: string, modelName: string, sourceFileUrl?: string) => {
+    setNewPickerOpen(null)
+    setViewer({
+      isOpen: true,
+      fileUrl: sourceFileUrl ?? '',
       modelName,
       proteinPdbId: data?.group.proteinPdbId,
       templateId
@@ -462,7 +474,7 @@ export default function ModelsTab() {
                   )}
                 </div>
 
-                <div className="ml-4">
+                <div className="ml-4 flex flex-col gap-2 items-end">
                   <input
                     type="file"
                     accept=".jpg,.jpeg,.png"
@@ -487,8 +499,64 @@ export default function ModelsTab() {
                         ? 'Replace'
                         : 'Upload'}
                   </button>
+                  {!model.submission && (
+                    <button
+                      onClick={() => setNewPickerOpen(newPickerOpen === model.id ? null : model.id)}
+                      className={`flex items-center gap-1.5 px-4 py-2 rounded-md transition-colors text-sm font-medium ${
+                        newPickerOpen === model.id
+                          ? 'bg-indigo-700 text-white'
+                          : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                      }`}
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      New
+                    </button>
+                  )}
                 </div>
               </div>
+
+              {/* Inline picker: choose starting point for a new model */}
+              {!model.submission && newPickerOpen === model.id && (
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Start from</p>
+                  <div className="flex gap-3 flex-wrap">
+                    {/* PDB option */}
+                    <button
+                      onClick={() => openNewViewer(model.id, model.name)}
+                      className="flex flex-col items-center gap-1.5 p-3 w-32 border-2 border-indigo-200 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 bg-white transition-colors text-left"
+                    >
+                      <div className="w-24 h-16 flex items-center justify-center bg-indigo-50 rounded">
+                        <svg className="w-10 h-10 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" />
+                        </svg>
+                      </div>
+                      <span className="text-xs font-semibold text-indigo-700">PDB Structure</span>
+                      <span className="text-xs text-gray-400">{data.group.proteinPdbId}</span>
+                    </button>
+
+                    {/* Existing submitted models */}
+                    {data.models
+                      .filter(m => m.submission && m.id !== model.id)
+                      .map(sourceModel => (
+                        <button
+                          key={sourceModel.id}
+                          onClick={() => openNewViewer(model.id, model.name, studentApi.getModelFileUrl(sourceModel.submission!.id))}
+                          className="flex flex-col items-center gap-1.5 p-3 w-32 border-2 border-gray-200 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 bg-white transition-colors text-left"
+                        >
+                          <img
+                            src={`${studentApi.getModelFileUrl(sourceModel.submission!.id)}&t=${new Date(sourceModel.submission!.updatedAt).getTime()}`}
+                            alt={sourceModel.name}
+                            className="w-24 h-16 object-cover rounded"
+                          />
+                          <span className="text-xs font-semibold text-gray-700 text-center leading-tight">{sourceModel.name}</span>
+                        </button>
+                      ))
+                    }
+                  </div>
+                </div>
+              )}
 
               {model.submission && (
                 <>
