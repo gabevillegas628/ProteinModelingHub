@@ -171,8 +171,9 @@ export default function ApplicationsTab() {
                         <span className="ml-2 font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">{app.pdbAccessionNumber}</span>
                       </p>
                       <p className="text-xs text-gray-400">
-                        Submitted {new Date(app.createdAt).toLocaleDateString('en-US', {
-                          month: 'short', day: 'numeric', year: 'numeric'
+                        Submitted {new Date(app.createdAt).toLocaleString('en-US', {
+                          month: 'short', day: 'numeric', year: 'numeric',
+                          hour: 'numeric', minute: '2-digit', hour12: true
                         })}
                       </p>
                     </div>
