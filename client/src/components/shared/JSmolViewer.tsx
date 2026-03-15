@@ -495,44 +495,44 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     setConsoleLog(prev => [...prev, { type: 'command', text: cmd }])
 
     if (appletRef.current && window.Jmol) {
-      // Snapshot _errorMessage before running so we can tell if a new error occurred
+      // Snapshot state before running so we can detect what actually changed
       let prevError = ''
+      let prevCount: number | null = null
       try {
         const e = window.Jmol.evaluateVar(appletRef.current, '_errorMessage')
         prevError = (e && typeof e === 'string') ? e : ''
+      } catch { /* ignore */ }
+      try {
+        const c = window.Jmol.evaluateVar(appletRef.current, '{selected}.count')
+        if (typeof c === 'number') prevCount = c
       } catch { /* ignore */ }
 
       // Run the command
       window.Jmol.script(appletRef.current, cmd)
 
-      // Try to get meaningful output after command executes
+      // Poll for output after command executes
       setTimeout(() => {
         if (appletRef.current && window.Jmol) {
-          // Try multiple approaches to get output
           let output = ''
           let isError = false
 
-          // Check for a NEW script error (ignore stale errors from previous commands)
+          // Only report an error if _errorMessage actually changed
           try {
             const errorMsg = window.Jmol.evaluateVar(appletRef.current, '_errorMessage')
             if (errorMsg && typeof errorMsg === 'string' && errorMsg.length > 0 && errorMsg !== prevError) {
               output = errorMsg
               isError = true
             }
-          } catch {
-            // Ignore errors
-          }
+          } catch { /* ignore */ }
 
-          // Check for selection count (most common feedback)
+          // Only report selection count if it actually changed
           if (!output) {
             try {
               const selectedCount = window.Jmol.evaluateVar(appletRef.current, '{selected}.count')
-              if (typeof selectedCount === 'number') {
+              if (typeof selectedCount === 'number' && selectedCount !== prevCount) {
                 output = `${selectedCount} atom${selectedCount !== 1 ? 's' : ''} selected`
               }
-            } catch {
-              // Ignore errors
-            }
+            } catch { /* ignore */ }
           }
 
           // Check echo buffer
@@ -542,12 +542,9 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
               if (echo && typeof echo === 'string' && echo.length > 0) {
                 output = echo
               }
-            } catch {
-              // Ignore errors
-            }
+            } catch { /* ignore */ }
           }
 
-          // Add output to console log if we got something
           if (output) {
             setConsoleLog(prev => [...prev, { type: isError ? 'error' : 'output', text: output }])
           }
