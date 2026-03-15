@@ -410,6 +410,15 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     }
   }, [isOpen])
 
+  // Prevent the page/parent from scrolling when the wheel is used inside the viewer
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el || !isOpen) return
+    const prevent = (e: WheelEvent) => e.preventDefault()
+    el.addEventListener('wheel', prevent, { passive: false })
+    return () => el.removeEventListener('wheel', prevent)
+  }, [isOpen])
+
   // Auto-scroll console to bottom when new entries are added
   useEffect(() => {
     if (consoleRef.current) {
