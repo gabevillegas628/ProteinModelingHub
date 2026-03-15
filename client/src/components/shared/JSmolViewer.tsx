@@ -323,9 +323,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
         const appletName = 'jsmolViewer_' + Date.now()
 
-        // Register a global pick callback before creating the applet.
-        // Jmol calls window[pickCbName](htmlName, strInfo, atomIndex, map) on every atom click,
-        // where strInfo is the human-readable atom info string (e.g. "[LEU]45:A #234").
+        // Register global callbacks before creating the applet.
         const pickCbName = appletName + '_pickCallback'
         ;(window as unknown as Record<string, unknown>)[pickCbName] = (
           _htmlName: string,
@@ -335,6 +333,16 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
           setConsoleLog(prev => [...prev, { type: 'output', text: strInfo }])
         }
 
+        // Script callback: Jmol calls this on every script status change.
+        // args[4] = strErrorMessageUntranslated — non-null only when an actual error occurred,
+        // regardless of whether _errorMessage is set (which misses many runtime errors).
+        const scriptCbName = appletName + '_scriptCallback'
+        ;(window as unknown as Record<string, unknown>)[scriptCbName] = (...args: unknown[]) => {
+          const errorMsg = args[4]
+          if (!errorMsg || typeof errorMsg !== 'string' || !errorMsg.trim()) return
+          setConsoleLog(prev => [...prev, { type: 'error', text: errorMsg.trim() }])
+        }
+
         appletRef.current = window.Jmol.getApplet(appletName, Info)
 
         if (containerRef.current && appletRef.current) {
@@ -342,8 +350,9 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
           setTimeout(() => {
             if (appletRef.current && window.Jmol) {
-              // Register the pick callback now that the applet is initialised
+              // Register callbacks now that the applet is initialised
               window.Jmol.setCallback(appletRef.current!, 'pick', pickCbName)
+              window.Jmol.setCallback(appletRef.current!, 'script', scriptCbName)
 
               // Set up base rendering settings
               const baseSettings = `
@@ -495,59 +504,25 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     setConsoleLog(prev => [...prev, { type: 'command', text: cmd }])
 
     if (appletRef.current && window.Jmol) {
-      // Snapshot state before running so we can detect what actually changed
-      let prevError = ''
+      // Snapshot selection count so we only report it if it actually changed
       let prevCount: number | null = null
-      try {
-        const e = window.Jmol.evaluateVar(appletRef.current, '_errorMessage')
-        prevError = (e && typeof e === 'string') ? e : ''
-      } catch { /* ignore */ }
       try {
         const c = window.Jmol.evaluateVar(appletRef.current, '{selected}.count')
         if (typeof c === 'number') prevCount = c
       } catch { /* ignore */ }
 
-      // Run the command
+      // Run the command. Errors are reported via the script callback (args[4]).
       window.Jmol.script(appletRef.current, cmd)
 
-      // Poll for output after command executes
+      // Poll for selection-count changes after the command executes
       setTimeout(() => {
         if (appletRef.current && window.Jmol) {
-          let output = ''
-          let isError = false
-
-          // Only report an error if _errorMessage actually changed
           try {
-            const errorMsg = window.Jmol.evaluateVar(appletRef.current, '_errorMessage')
-            if (errorMsg && typeof errorMsg === 'string' && errorMsg.length > 0 && errorMsg !== prevError) {
-              output = errorMsg
-              isError = true
+            const selectedCount = window.Jmol.evaluateVar(appletRef.current, '{selected}.count')
+            if (typeof selectedCount === 'number' && selectedCount !== prevCount) {
+              setConsoleLog(prev => [...prev, { type: 'output', text: `${selectedCount} atom${selectedCount !== 1 ? 's' : ''} selected` }])
             }
           } catch { /* ignore */ }
-
-          // Only report selection count if it actually changed
-          if (!output) {
-            try {
-              const selectedCount = window.Jmol.evaluateVar(appletRef.current, '{selected}.count')
-              if (typeof selectedCount === 'number' && selectedCount !== prevCount) {
-                output = `${selectedCount} atom${selectedCount !== 1 ? 's' : ''} selected`
-              }
-            } catch { /* ignore */ }
-          }
-
-          // Check echo buffer
-          if (!output) {
-            try {
-              const echo = window.Jmol.evaluateVar(appletRef.current, 'echo')
-              if (echo && typeof echo === 'string' && echo.length > 0) {
-                output = echo
-              }
-            } catch { /* ignore */ }
-          }
-
-          if (output) {
-            setConsoleLog(prev => [...prev, { type: isError ? 'error' : 'output', text: output }])
-          }
         }
       }, 200)
     }
