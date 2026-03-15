@@ -497,6 +497,13 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     setConsoleLog(prev => [...prev, { type: 'command', text: cmd }])
 
     if (appletRef.current && window.Jmol) {
+      // Snapshot _errorMessage before running so we can tell if a new error occurred
+      let prevError = ''
+      try {
+        const e = window.Jmol.evaluateVar(appletRef.current, '_errorMessage')
+        prevError = (e && typeof e === 'string') ? e : ''
+      } catch { /* ignore */ }
+
       // Run the command
       window.Jmol.script(appletRef.current, cmd)
 
@@ -507,10 +514,10 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
           let output = ''
           let isError = false
 
-          // Check for script error message first
+          // Check for a NEW script error (ignore stale errors from previous commands)
           try {
             const errorMsg = window.Jmol.evaluateVar(appletRef.current, '_errorMessage')
-            if (errorMsg && typeof errorMsg === 'string' && errorMsg.length > 0) {
+            if (errorMsg && typeof errorMsg === 'string' && errorMsg.length > 0 && errorMsg !== prevError) {
               output = errorMsg
               isError = true
             }
