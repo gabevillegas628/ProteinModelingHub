@@ -67,8 +67,10 @@ function stripLoadCommands(state: string): string {
 export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, proteinPdbId, templateId, onSubmit, groupId }: JSmolViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const consoleRef = useRef<HTMLDivElement>(null)
+  const consolePopoutRef = useRef<HTMLDivElement>(null)
   const appletRef = useRef<JmolApplet | null>(null)
   const scriptErrorFiredRef = useRef(false)
+  const consoleDragRef = useRef({ active: false, startX: 0, startY: 0, startPosX: 0, startPosY: 0 })
 
   const originalStateRef = useRef<{ stateCommands: string | null }>({ stateCommands: null })
   const [loading, setLoading] = useState(true)
@@ -84,6 +86,8 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   const [commandHistory, setCommandHistory] = useState<string[]>([])
   const [historyIndex, setHistoryIndex] = useState(-1)
   const [consoleLog, setConsoleLog] = useState<Array<{ type: 'command' | 'output' | 'error', text: string }>>([])
+  const [consolePopout, setConsolePopout] = useState(false)
+  const [consolePos, setConsolePos] = useState({ x: 0, y: 0 })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitProgress, setSubmitProgress] = useState({ percent: 0, status: '' })
   const [showResetConfirm, setShowResetConfirm] = useState(false)
@@ -433,7 +437,31 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     if (consoleRef.current) {
       consoleRef.current.scrollTop = consoleRef.current.scrollHeight
     }
+    if (consolePopoutRef.current) {
+      consolePopoutRef.current.scrollTop = consolePopoutRef.current.scrollHeight
+    }
   }, [consoleLog])
+
+  // Drag the popout console
+  useEffect(() => {
+    if (!consolePopout) return
+    const onMove = (e: MouseEvent) => {
+      if (!consoleDragRef.current.active) return
+      const dx = e.clientX - consoleDragRef.current.startX
+      const dy = e.clientY - consoleDragRef.current.startY
+      setConsolePos({
+        x: consoleDragRef.current.startPosX + dx,
+        y: consoleDragRef.current.startPosY + dy,
+      })
+    }
+    const onUp = () => { consoleDragRef.current.active = false }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    return () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+  }, [consolePopout])
 
   const runScript = (script: string) => {
     if (appletRef.current && window.Jmol) {
@@ -849,7 +877,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                 </svg>
-                Chat
+                Team Chat
                 {chatUnread > 0 && !chatOpen && (
                   <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
                     {chatUnread > 9 ? '9+' : chatUnread}
@@ -1041,49 +1069,64 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
         </div>
 
         {/* Script Console Footer */}
-        <div className="border-t bg-gray-900 shrink-0">
-          {consoleLog.length > 0 && (
-            <div
-              ref={consoleRef}
-              className="px-4 py-2 font-mono text-sm bg-gray-800 border-b border-gray-700 max-h-32 overflow-y-auto"
-            >
-              {consoleLog.map((entry, index) => (
-                <div key={index} className={`${
-                  entry.type === 'command'
-                    ? 'text-white'
-                    : entry.type === 'error'
-                      ? 'text-red-400'
-                      : 'text-green-400'
-                }`}>
-                  {entry.type === 'command' ? `> ${entry.text}` : `  ${entry.text}`}
-                </div>
-              ))}
-            </div>
-          )}
-          <form onSubmit={handleCommandSubmit} className="flex items-center gap-3 px-4 py-3">
-            <span className="text-green-400 font-mono text-base">{">"}</span>
-            <input
-              type="text"
-              value={command}
-              onChange={(e) => setCommand(e.target.value)}
-              onKeyDown={handleCommandKeyDown}
-              placeholder="Enter Jmol command (e.g., select helix; color red)"
-              className="flex-1 bg-transparent text-white font-mono text-base focus:outline-none placeholder-gray-500"
-            />
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-gray-500">↑↓ history</span>
-              {consoleLog.length > 0 && (
+        {!consolePopout && (
+          <div className="border-t bg-gray-900 shrink-0">
+            {consoleLog.length > 0 && (
+              <div
+                ref={consoleRef}
+                className="px-4 py-2 font-mono text-sm bg-gray-800 border-b border-gray-700 max-h-32 overflow-y-auto"
+              >
+                {consoleLog.map((entry, index) => (
+                  <div key={index} className={`${
+                    entry.type === 'command'
+                      ? 'text-white'
+                      : entry.type === 'error'
+                        ? 'text-red-400'
+                        : 'text-green-400'
+                  }`}>
+                    {entry.type === 'command' ? `> ${entry.text}` : `  ${entry.text}`}
+                  </div>
+                ))}
+              </div>
+            )}
+            <form onSubmit={handleCommandSubmit} className="flex items-center gap-3 px-4 py-3">
+              <span className="text-green-400 font-mono text-base">{">"}</span>
+              <input
+                type="text"
+                value={command}
+                onChange={(e) => setCommand(e.target.value)}
+                onKeyDown={handleCommandKeyDown}
+                placeholder="Enter Jmol command (e.g., select helix; color red)"
+                className="flex-1 bg-transparent text-white font-mono text-base focus:outline-none placeholder-gray-500"
+              />
+              <div className="flex items-center gap-3">
+                <span className="text-xs text-gray-500">↑↓ history</span>
+                {consoleLog.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setConsoleLog([])}
+                    className="text-xs text-gray-500 hover:text-gray-300"
+                  >
+                    clear
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={() => setConsoleLog([])}
-                  className="text-xs text-gray-500 hover:text-gray-300"
+                  onClick={() => {
+                    setConsolePos({ x: window.innerWidth - 630, y: 20 })
+                    setConsolePopout(true)
+                  }}
+                  className="text-gray-500 hover:text-gray-300"
+                  title="Pop out console"
                 >
-                  clear
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                  </svg>
                 </button>
-              )}
-            </div>
-          </form>
-        </div>
+              </div>
+            </form>
+          </div>
+        )}
 
       </div>
 
@@ -1534,6 +1577,98 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
           </section>
 
         </div>
+      </div>,
+      document.body
+    )}
+
+    {/* Console popout - draggable, resizable floating window */}
+    {isOpen && consolePopout && createPortal(
+      <div
+        style={{
+          position: 'fixed',
+          left: consolePos.x,
+          top: consolePos.y,
+          zIndex: 9999,
+          width: 620,
+          height: 420,
+          resize: 'both',
+          overflow: 'hidden',
+          minWidth: 320,
+          minHeight: 200,
+        }}
+        className="bg-gray-900 rounded-lg border border-gray-700 shadow-2xl flex flex-col"
+      >
+        {/* Draggable header */}
+        <div
+          className="flex items-center justify-between px-3 py-2 bg-gray-800 rounded-t-lg cursor-move select-none shrink-0"
+          onMouseDown={(e) => {
+            consoleDragRef.current = {
+              active: true,
+              startX: e.clientX,
+              startY: e.clientY,
+              startPosX: consolePos.x,
+              startPosY: consolePos.y,
+            }
+          }}
+        >
+          <span className="text-white text-sm font-mono font-medium">Console</span>
+          <div className="flex items-center gap-3">
+            {consoleLog.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setConsoleLog([])}
+                className="text-xs text-gray-400 hover:text-gray-200"
+              >
+                clear
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setConsolePopout(false)}
+              className="text-gray-400 hover:text-white"
+              title="Dock console"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 9L4 4m0 0v5m0-5h5M15 9l5-5m0 0v5m0-5h-5M9 15l-5 5m0 0v-5m0 5h5M15 15l5 5m0 0v-5m0 5h-5" />
+              </svg>
+            </button>
+          </div>
+        </div>
+
+        {/* Log area */}
+        <div
+          ref={consolePopoutRef}
+          className="flex-1 overflow-y-auto px-4 py-2 font-mono text-sm min-h-0"
+        >
+          {consoleLog.length === 0 && (
+            <p className="text-gray-600 text-xs mt-2">No output yet. Run a command below.</p>
+          )}
+          {consoleLog.map((entry, index) => (
+            <div key={index} className={`${
+              entry.type === 'command'
+                ? 'text-white'
+                : entry.type === 'error'
+                  ? 'text-red-400'
+                  : 'text-green-400'
+            }`}>
+              {entry.type === 'command' ? `> ${entry.text}` : `  ${entry.text}`}
+            </div>
+          ))}
+        </div>
+
+        {/* Input */}
+        <form onSubmit={handleCommandSubmit} className="flex items-center gap-3 px-4 py-3 border-t border-gray-700 shrink-0">
+          <span className="text-green-400 font-mono text-base">{">"}</span>
+          <input
+            type="text"
+            value={command}
+            onChange={(e) => setCommand(e.target.value)}
+            onKeyDown={handleCommandKeyDown}
+            placeholder="Enter Jmol command…"
+            className="flex-1 bg-transparent text-white font-mono text-base focus:outline-none placeholder-gray-500"
+          />
+          <span className="text-xs text-gray-500">↑↓ history</span>
+        </form>
       </div>,
       document.body
     )}
