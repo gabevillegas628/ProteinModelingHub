@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="5" fill="#0f172a"/>
+
+  <!-- Side connectors (dark blue column tying the rings together) -->
+  <line x1="4" y1="8" x2="4" y2="24" stroke="#1e3a8a" stroke-width="5"/>
+  <line x1="28" y1="8" x2="28" y2="24" stroke="#1e3a8a" stroke-width="5"/>
+
+  <!-- Back arcs — lower half of each ring (dark blue), sweep=1 curves downward -->
+  <path d="M 4 8 A 12 4 0 0 1 28 8"   fill="none" stroke="#1e3a8a" stroke-width="5" stroke-linecap="round"/>
+  <path d="M 4 16 A 12 4 0 0 1 28 16" fill="none" stroke="#1e3a8a" stroke-width="5" stroke-linecap="round"/>
+  <path d="M 4 24 A 12 4 0 0 1 28 24" fill="none" stroke="#1e3a8a" stroke-width="5" stroke-linecap="round"/>
+
+  <!-- Front arcs — upper half of each ring (light blue), sweep=0 curves upward -->
+  <path d="M 4 8 A 12 4 0 0 0 28 8"   fill="none" stroke="#7dd3fc" stroke-width="5" stroke-linecap="round"/>
+  <path d="M 4 16 A 12 4 0 0 0 28 16" fill="none" stroke="#7dd3fc" stroke-width="5" stroke-linecap="round"/>
+  <path d="M 4 24 A 12 4 0 0 0 28 24" fill="none" stroke="#7dd3fc" stroke-width="5" stroke-linecap="round"/>
+</svg>

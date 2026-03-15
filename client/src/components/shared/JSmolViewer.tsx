@@ -32,6 +32,7 @@ interface JmolInfo {
   allowJavaScript?: boolean;
   readyFunction?: (applet: JmolApplet) => void;
   console?: string;
+  statusChangedCallback?: string;
 }
 
 interface JmolApplet {
@@ -67,6 +68,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   const containerRef = useRef<HTMLDivElement>(null)
   const consoleRef = useRef<HTMLDivElement>(null)
   const appletRef = useRef<JmolApplet | null>(null)
+  const statusCallbackNameRef = useRef<string | null>(null)
   const originalStateRef = useRef<{ stateCommands: string | null }>({ stateCommands: null })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -109,6 +111,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
   // Viewer chat state
   const { user } = useAuth()
+  const [helpOpen, setHelpOpen] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
   const [chatMessages, setChatMessages] = useState<viewerChatApi.ViewerChatMessage[]>([])
   const [chatInput, setChatInput] = useState('')
@@ -319,6 +322,29 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
         window.Jmol.setDocument(false)
 
         const appletName = 'jsmolViewer_' + Date.now()
+
+        // Register a status callback so JSmol streams atom-pick events and errors
+        // into our console. JSmol calls window[callbackName](appletId, infoType, statusCode, msg).
+        const callbackName = appletName + '_statusCallback'
+        statusCallbackNameRef.current = callbackName
+        ;(window as unknown as Record<string, unknown>)[callbackName] = (
+          _appletId: string,
+          infoType: string,
+          _statusCode: number,
+          statusMessage: string
+        ) => {
+          if (!statusMessage || typeof statusMessage !== 'string') return
+          const msg = statusMessage.trim()
+          if (!msg) return
+          if (infoType === 'AtomPicked') {
+            setConsoleLog(prev => [...prev, { type: 'output', text: msg }])
+          } else if (infoType === 'Error' || infoType === 'ScriptError') {
+            setConsoleLog(prev => [...prev, { type: 'error', text: msg }])
+          }
+        }
+
+        Info.statusChangedCallback = callbackName
+
         appletRef.current = window.Jmol.getApplet(appletName, Info)
 
         if (containerRef.current && appletRef.current) {
@@ -388,6 +414,10 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   useEffect(() => {
     if (!isOpen && appletRef.current) {
       appletRef.current = null
+      if (statusCallbackNameRef.current) {
+        delete (window as unknown as Record<string, unknown>)[statusCallbackNameRef.current]
+        statusCallbackNameRef.current = null
+      }
     }
   }, [isOpen])
 
@@ -857,6 +887,20 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
               </button>
             )}
             <button
+              onClick={() => setHelpOpen(o => !o)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                helpOpen
+                  ? 'bg-purple-100 text-purple-700 hover:bg-purple-200'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+              title={helpOpen ? 'Close help' : 'Open JSmol help'}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Help
+            </button>
+            <button
               onClick={() => setShowControls(!showControls)}
               className="text-gray-500 hover:text-gray-700 p-2"
               title={showControls ? 'Hide controls' : 'Show controls'}
@@ -1239,6 +1283,290 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
       </div>,
       document.body
     )}
+    {/* Help panel - rendered via portal to escape JSmol's z-index stacking */}
+    {isOpen && helpOpen && createPortal(
+      <div className="fixed bottom-6 left-6 w-105 bg-gray-900/95 rounded-lg border border-gray-700 shadow-2xl flex flex-col overflow-hidden" style={{ zIndex: 9999, maxHeight: '560px' }}>
+        {/* Header */}
+        <div className="flex items-center justify-between px-3 py-2.5 bg-gray-800 shrink-0">
+          <span className="text-white text-sm font-medium">JSmol Help</span>
+          <button onClick={() => setHelpOpen(false)} className="text-gray-400 hover:text-white">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Scrollable content */}
+        <div className="overflow-y-auto p-4 space-y-5 text-sm text-gray-200">
+
+          {/* Mouse controls */}
+          <section>
+            <h3 className="text-purple-400 font-semibold uppercase text-xs tracking-wider mb-2">Mouse Controls</h3>
+            <table className="w-full text-xs border-separate" style={{ borderSpacing: '0 4px' }}>
+              <tbody>
+                {[
+                  ['Left-drag', 'Rotate'],
+                  ['Right-drag / Shift+drag', 'Translate (pan)'],
+                  ['Scroll wheel / pinch', 'Zoom'],
+                  ['Double-click', 'Centre on atom'],
+                  ['Ctrl+drag', 'Rotate Z-axis'],
+                ].map(([action, desc]) => (
+                  <tr key={action}>
+                    <td className="pr-3 font-mono text-gray-300 whitespace-nowrap">{action}</td>
+                    <td className="text-gray-400">{desc}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </section>
+
+          {/* Script console */}
+          <section>
+            <h3 className="text-purple-400 font-semibold uppercase text-xs tracking-wider mb-2">Script Console</h3>
+            <p className="text-gray-400 text-xs mb-2">Type Jmol commands in the bar at the bottom of the viewer. Use ↑ / ↓ to recall previous commands.</p>
+            <div className="space-y-1.5">
+              {[
+                ['select <type>', 'Select atoms by type — use a keyword from the list below, e.g. select helix'],
+                ['label %n', 'Label atoms with residue number'],
+                ['label off', 'Remove all labels'],
+                ['zoom 200', 'Zoom to 200 %'],
+                ['reset', 'Reset view to default'],
+                ['background white', 'Set background colour'],
+              ].map(([cmd, desc]) => (
+                <div key={cmd} className="flex items-start gap-2">
+                  <span className="font-mono text-xs text-green-400 shrink-0 bg-gray-800 px-1.5 py-0.5 rounded">{cmd}</span>
+                  <span className="text-gray-400 text-xs leading-5">{desc}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-gray-400 text-xs mt-3 mb-2">Selection keywords:</p>
+            <div className="grid grid-cols-2 gap-x-3 gap-y-1.5">
+              {[
+                ['protein',     'All protein atoms'],
+                ['backbone',    'Cα to Cα'],
+                ['sidechain',   'Side-chain atoms'],
+                ['alpha',       'Cα atoms only'],
+                ['helix',       'α-helices'],
+                ['sheet',       'β-strands'],
+                ['hydrophobic', 'NP residues'],
+                ['hydrophilic', 'Polar residues'],
+                ['charged',     'Charged residues'],
+                ['nucleic',     'Nucleic acid'],
+                ['water',       'Solvent / water'],
+                ['hetero',      'Non-protein, non-water (ligands)'],
+              ].map(([kw, desc]) => (
+                <div key={kw} className="flex items-start gap-1.5 min-w-0">
+                  <span className="font-mono text-xs text-green-400 shrink-0 bg-gray-800 px-1.5 py-0.5 rounded">{kw}</span>
+                  <span className="text-gray-500 text-xs leading-5">{desc}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Display Style Commands */}
+          <section>
+            <h3 className="text-purple-400 font-semibold uppercase text-xs tracking-wider mb-2">Display Style Commands</h3>
+            <p className="text-gray-400 text-xs mb-2">These commands switch the rendering style for the current selection (or all atoms if nothing is selected). Append <span className="font-mono text-yellow-400">only</span> to hide everything else.</p>
+            <div className="space-y-1.5">
+              {[
+                ['cartoon only', 'Helices as ribbons, strands as arrows'],
+                ['ribbon only', 'Smooth ribbon through Cα atoms'],
+                ['trace only', 'Simple Cα backbone trace'],
+                ['backbone only', 'Backbone tube (hides all other atoms)'],
+                ['wireframe only', 'All bonds as lines — full atomic detail'],
+                ['spacefill only', 'Atoms as van der Waals spheres'],
+                ['wireframe 0.15; spacefill 23%', 'Ball & stick style'],
+              ].map(([cmd, desc]) => (
+                <div key={cmd} className="flex items-start gap-2">
+                  <span className="font-mono text-xs text-green-400 shrink-0 bg-gray-800 px-1.5 py-0.5 rounded">{cmd}</span>
+                  <span className="text-gray-400 text-xs leading-5">{desc}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-gray-400 text-xs mt-3 mb-2">Most styles accept a size argument instead of <span className="font-mono text-yellow-400">only</span>:</p>
+            <div className="space-y-1.5">
+              {[
+                ['backbone 1.5', 'Backbone tube thickness (try 0.3–2.0)'],
+                ['wireframe 0.3', 'Bond cylinders — 0.0 = lines, higher = thicker'],
+                ['trace 0.5', 'Trace tube radius'],
+                ['spacefill 75%', 'Spacefill at 75 % of van der Waals radius'],
+              ].map(([cmd, desc]) => (
+                <div key={cmd} className="flex items-start gap-2">
+                  <span className="font-mono text-xs text-green-400 shrink-0 bg-gray-800 px-1.5 py-0.5 rounded">{cmd}</span>
+                  <span className="text-gray-400 text-xs leading-5">{desc}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Backbone */}
+          <section>
+            <h3 className="text-purple-400 font-semibold uppercase text-xs tracking-wider mb-2">Backbone</h3>
+            <p className="text-gray-400 text-xs mb-2">Most models here show only the backbone — the chain of Cα atoms connecting residues, without side chains.</p>
+            <div className="space-y-1.5">
+              {[
+                ['backbone only', 'Show backbone as a tube (hides all other atoms)'],
+                ['backbone 1.5', 'Backbone tube — number controls thickness (try 0.3–2.0; 1.5 is a good default)'],
+                ['select backbone', 'Select all backbone atoms'],
+                ['select sidechain', 'Select all side-chain atoms'],
+                ['select alpha', 'Select only Cα atoms'],
+                ['color backbone red', 'Colour backbone a specific colour'],
+                ['select 45 and (sidechain or alpha)', 'Select residue 45 including side chain and Cα, but not backbone atoms'],
+              ].map(([cmd, desc]) => (
+                <div key={cmd} className="flex items-start gap-2">
+                  <span className="font-mono text-xs text-green-400 shrink-0 bg-gray-800 px-1.5 py-0.5 rounded">{cmd}</span>
+                  <span className="text-gray-400 text-xs leading-5">{desc}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Struts */}
+          <section>
+            <h3 className="text-purple-400 font-semibold uppercase text-xs tracking-wider mb-2">Struts</h3>
+            <p className="text-gray-400 text-xs mb-2">Struts are cylindrical connectors drawn between nearby backbone atoms to visualise the 3-D scaffold of the protein.</p>
+            <div className="space-y-1.5">
+              {[
+                ['struts on',        'Show struts (uses last calculated set)'],
+                ['struts off',       'Hide struts'],
+                ['struts 0.3',       'Show struts at given width (try 0.1–0.5)'],
+                ['calculate struts', 'Recalculate struts for the current model'],
+              ].map(([cmd, desc]) => (
+                <div key={cmd} className="flex items-start gap-2">
+                  <span className="font-mono text-xs text-green-400 shrink-0 bg-gray-800 px-1.5 py-0.5 rounded">{cmd}</span>
+                  <span className="text-gray-400 text-xs leading-5">{desc}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Boolean selection logic */}
+          <section>
+            <h3 className="text-purple-400 font-semibold uppercase text-xs tracking-wider mb-2">Selection Logic</h3>
+            <p className="text-gray-400 text-xs mb-2">Combine selectors with <span className="font-mono text-yellow-400">and</span>, <span className="font-mono text-yellow-400">or</span>, <span className="font-mono text-yellow-400">not</span> to target exactly the atoms you want.</p>
+            <div className="space-y-1.5">
+              {[
+                ['select helix and chain A',        'Helices in chain A only'],
+                ['select not backbone',              'Everything except the backbone'],
+                ['select protein and not backbone',  'Side chains only'],
+                ['select backbone or ligand',        'Backbone plus any ligands'],
+                ['select resno < 50',                'First 50 residues'],
+                ['select resno > 100 and resno < 200', 'Residues 101–199'],
+                ['select chain A and backbone',      'Chain A backbone atoms'],
+                ['select not (helix or sheet)',       'Loop / coil regions only'],
+                ['select protein and not helix and not sheet', 'Loops with backbone context'],
+              ].map(([cmd, desc]) => (
+                <div key={cmd} className="flex items-start gap-2">
+                  <span className="font-mono text-xs text-green-400 shrink-0 bg-gray-800 px-1.5 py-0.5 rounded">{cmd}</span>
+                  <span className="text-gray-400 text-xs leading-5">{desc}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-gray-500 text-xs mt-2">After selecting, apply any <span className="font-mono text-green-400">color</span> or display command to affect only the selection.</p>
+          </section>
+
+          {/* Display styles */}
+          <section>
+            <h3 className="text-purple-400 font-semibold uppercase text-xs tracking-wider mb-2">Display Styles</h3>
+            <div className="space-y-1 text-xs text-gray-400">
+              {[
+                ['Cartoon', 'Helices as ribbons, strands as arrows. Best for overall fold.'],
+                ['Ribbon', 'Smooth ribbon through Cα atoms. Good for topology.'],
+                ['Trace', 'Simple Cα backbone trace.'],
+                ['Wireframe', 'All bonds as lines. Shows full atomic detail.'],
+                ['Spacefill', 'Atoms as van der Waals spheres. Shows shape/surface.'],
+                ['Ball & Stick', 'Spheres for atoms, cylinders for bonds.'],
+              ].map(([style, desc]) => (
+                <div key={style} className="flex gap-2">
+                  <span className="text-gray-300 font-medium shrink-0 w-20">{style}</span>
+                  <span>{desc}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Colour schemes */}
+          <section>
+            <h3 className="text-purple-400 font-semibold uppercase text-xs tracking-wider mb-2">Colour Schemes</h3>
+            <div className="space-y-1 text-xs text-gray-400">
+              {[
+                ['Secondary Structure', 'Helices red, sheets yellow, loops white.'],
+                ['Chain', 'Each chain gets a distinct colour.'],
+                ['Amino Acid', 'Colour by residue type (Rasmol convention).'],
+                ['Temperature', 'Blue (low B-factor) → red (high B-factor).'],
+                ['Group', 'Rainbow from N-terminus (blue) to C-terminus (red).'],
+              ].map(([scheme, desc]) => (
+                <div key={scheme} className="flex gap-2">
+                  <span className="text-gray-300 font-medium shrink-0 w-36">{scheme}</span>
+                  <span>{desc}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          {/* Available colors */}
+          <section>
+            <h3 className="text-purple-400 font-semibold uppercase text-xs tracking-wider mb-2">Colors</h3>
+            <div className="space-y-1.5 mb-3">
+              {[
+                ['color red', 'Colour selection red (or any named colour below)'],
+                ['color cpk', 'CPK / element colouring'],
+                ['color temperature', 'B-factor (temperature) colouring'],
+                ['color structure', 'Secondary structure colouring'],
+                ['color chain', 'Colour by chain'],
+                ['color group', 'Rainbow N→C terminus'],
+              ].map(([cmd, desc]) => (
+                <div key={cmd} className="flex items-start gap-2">
+                  <span className="font-mono text-xs text-green-400 shrink-0 bg-gray-800 px-1.5 py-0.5 rounded">{cmd}</span>
+                  <span className="text-gray-400 text-xs leading-5">{desc}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-gray-400 text-xs mb-2">Named colours — use with <span className="font-mono text-green-400 bg-gray-800 px-1 rounded">color &lt;name&gt;</span>, e.g. <span className="font-mono text-green-400 bg-gray-800 px-1 rounded">color salmon</span></p>
+            <div className="flex flex-wrap gap-1.5">
+              {[
+                ['red',       '#ef4444'],
+                ['orange',    '#f97316'],
+                ['yellow',    '#eab308'],
+                ['green',     '#22c55e'],
+                ['cyan',      '#06b6d4'],
+                ['blue',      '#3b82f6'],
+                ['violet',    '#8b5cf6'],
+                ['magenta',   '#d946ef'],
+                ['pink',      '#ec4899'],
+                ['white',     '#f1f5f9'],
+                ['lightgrey', '#94a3b8'],
+                ['grey',      '#6b7280'],
+                ['darkgrey',  '#374151'],
+                ['black',     '#1e293b'],
+                ['salmon',    '#fa8072'],
+                ['coral',     '#ff7f50'],
+                ['gold',      '#ffd700'],
+                ['wheat',     '#f5deb3'],
+                ['tan',       '#d2b48c'],
+                ['brown',     '#92400e'],
+                ['olive',     '#84cc16'],
+                ['teal',      '#14b8a6'],
+                ['navy',      '#1e3a8a'],
+                ['purple',    '#9333ea'],
+              ].map(([name, hex]) => (
+                <div
+                  key={name}
+                  className="flex items-center gap-1 text-xs text-gray-300 font-mono bg-gray-800 px-1.5 py-0.5 rounded cursor-default"
+                  title={hex}
+                >
+                  <span className="w-2.5 h-2.5 rounded-sm shrink-0 border border-gray-600" style={{ backgroundColor: hex }} />
+                  {name}
+                </div>
+              ))}
+            </div>
+          </section>
+
+        </div>
+      </div>,
+      document.body
+    )}
+
     </>
   )
 }
