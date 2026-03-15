@@ -68,6 +68,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   const containerRef = useRef<HTMLDivElement>(null)
   const consoleRef = useRef<HTMLDivElement>(null)
   const appletRef = useRef<JmolApplet | null>(null)
+  const scriptErrorFiredRef = useRef(false)
 
   const originalStateRef = useRef<{ stateCommands: string | null }>({ stateCommands: null })
   const [loading, setLoading] = useState(true)
@@ -340,6 +341,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
         ;(window as unknown as Record<string, unknown>)[scriptCbName] = (...args: unknown[]) => {
           const errorMsg = args[4]
           if (!errorMsg || typeof errorMsg !== 'string' || !errorMsg.trim()) return
+          scriptErrorFiredRef.current = true
           setConsoleLog(prev => [...prev, { type: 'error', text: errorMsg.trim() }])
         }
 
@@ -504,22 +506,16 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     setConsoleLog(prev => [...prev, { type: 'command', text: cmd }])
 
     if (appletRef.current && window.Jmol) {
-      // Snapshot selection count so we only report it if it actually changed
-      let prevCount: number | null = null
-      try {
-        const c = window.Jmol.evaluateVar(appletRef.current, '{selected}.count')
-        if (typeof c === 'number') prevCount = c
-      } catch { /* ignore */ }
-
       // Run the command. Errors are reported via the script callback (args[4]).
+      scriptErrorFiredRef.current = false
       window.Jmol.script(appletRef.current, cmd)
 
-      // Poll for selection-count changes after the command executes
+      // Report selection count unless the script callback already fired an error
       setTimeout(() => {
-        if (appletRef.current && window.Jmol) {
+        if (appletRef.current && window.Jmol && !scriptErrorFiredRef.current) {
           try {
             const selectedCount = window.Jmol.evaluateVar(appletRef.current, '{selected}.count')
-            if (typeof selectedCount === 'number' && selectedCount !== prevCount) {
+            if (typeof selectedCount === 'number') {
               setConsoleLog(prev => [...prev, { type: 'output', text: `${selectedCount} atom${selectedCount !== 1 ? 's' : ''} selected` }])
             }
           } catch { /* ignore */ }
