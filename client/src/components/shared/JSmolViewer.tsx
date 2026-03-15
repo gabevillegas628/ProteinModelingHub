@@ -15,9 +15,7 @@ declare global {
       evaluateVar: (applet: JmolApplet, variable: string) => unknown;
       getPropertyAsString: (applet: JmolApplet, property: string, params?: string) => string;
       getPropertyAsArray: (applet: JmolApplet, property: string, params?: string) => number[];
-      User: {
-        viewUpdatedCallback: ((applet: JmolApplet, msg: string) => void) | null;
-      };
+      setCallback: (applet: JmolApplet, name: string, callbackName: string) => void;
     };
   }
 }
@@ -325,32 +323,28 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
         const appletName = 'jsmolViewer_' + Date.now()
 
-        appletRef.current = window.Jmol.getApplet(appletName, Info)
-
-        // Hook Jmol.User.viewUpdatedCallback to capture atom-pick events.
-        // This version of JSmol routes picks through Jmol.User.viewUpdatedCallback
-        // with msg="updateAtomPick" rather than a statusChangedCallback.
-        window.Jmol.User.viewUpdatedCallback = (applet, msg) => {
-          if (msg !== 'updateAtomPick' || applet !== appletRef.current) return
-          if (!window.Jmol || !appletRef.current) return
-          try {
-            const json = window.Jmol.getPropertyAsString(appletRef.current, 'atomInfo', '{selected}')
-            if (!json) return
-            const data = JSON.parse(json) as { atoms?: { group: string; resno: number; chain: string; atomName: string }[] }
-            const atoms = data?.atoms
-            if (!atoms || atoms.length === 0) return
-            const lines = atoms.map(a => `[${a.group}]${a.resno}:${a.chain}  ${a.atomName}`).join('\n')
-            setConsoleLog(prev => [...prev, { type: 'output', text: lines }])
-          } catch {
-            // ignore parse errors
-          }
+        // Register a global pick callback before creating the applet.
+        // Jmol calls window[pickCbName](htmlName, strInfo, atomIndex, map) on every atom click,
+        // where strInfo is the human-readable atom info string (e.g. "[LEU]45:A #234").
+        const pickCbName = appletName + '_pickCallback'
+        ;(window as unknown as Record<string, unknown>)[pickCbName] = (
+          _htmlName: string,
+          strInfo: string
+        ) => {
+          if (!strInfo) return
+          setConsoleLog(prev => [...prev, { type: 'output', text: strInfo }])
         }
+
+        appletRef.current = window.Jmol.getApplet(appletName, Info)
 
         if (containerRef.current && appletRef.current) {
           containerRef.current.innerHTML = window.Jmol.getAppletHtml(appletRef.current)
 
           setTimeout(() => {
             if (appletRef.current && window.Jmol) {
+              // Register the pick callback now that the applet is initialised
+              window.Jmol.setCallback(appletRef.current!, 'pick', pickCbName)
+
               // Set up base rendering settings
               const baseSettings = `
                 set antialiasDisplay ON;
@@ -413,9 +407,6 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   useEffect(() => {
     if (!isOpen && appletRef.current) {
       appletRef.current = null
-      if (window.Jmol?.User) {
-        window.Jmol.User.viewUpdatedCallback = null
-      }
     }
   }, [isOpen])
 
