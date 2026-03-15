@@ -15,6 +15,9 @@ declare global {
       evaluateVar: (applet: JmolApplet, variable: string) => unknown;
       getPropertyAsString: (applet: JmolApplet, property: string, params?: string) => string;
       getPropertyAsArray: (applet: JmolApplet, property: string, params?: string) => number[];
+      User: {
+        viewUpdatedCallback: ((applet: JmolApplet, msg: string) => void) | null;
+      };
     };
   }
 }
@@ -32,7 +35,6 @@ interface JmolInfo {
   allowJavaScript?: boolean;
   readyFunction?: (applet: JmolApplet) => void;
   console?: string;
-  statusChangedCallback?: string;
 }
 
 interface JmolApplet {
@@ -68,7 +70,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   const containerRef = useRef<HTMLDivElement>(null)
   const consoleRef = useRef<HTMLDivElement>(null)
   const appletRef = useRef<JmolApplet | null>(null)
-  const statusCallbackNameRef = useRef<string | null>(null)
+
   const originalStateRef = useRef<{ stateCommands: string | null }>({ stateCommands: null })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -323,29 +325,26 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
         const appletName = 'jsmolViewer_' + Date.now()
 
-        // Register a status callback so JSmol streams atom-pick events and errors
-        // into our console. JSmol calls window[callbackName](appletId, infoType, statusCode, msg).
-        const callbackName = appletName + '_statusCallback'
-        statusCallbackNameRef.current = callbackName
-        ;(window as unknown as Record<string, unknown>)[callbackName] = (
-          _appletId: string,
-          infoType: string,
-          _statusCode: number,
-          statusMessage: string
-        ) => {
-          if (!statusMessage || typeof statusMessage !== 'string') return
-          const msg = statusMessage.trim()
-          if (!msg) return
-          if (infoType === 'AtomPicked') {
-            setConsoleLog(prev => [...prev, { type: 'output', text: msg }])
-          } else if (infoType === 'Error' || infoType === 'ScriptError') {
-            setConsoleLog(prev => [...prev, { type: 'error', text: msg }])
+        appletRef.current = window.Jmol.getApplet(appletName, Info)
+
+        // Hook Jmol.User.viewUpdatedCallback to capture atom-pick events.
+        // This version of JSmol routes picks through Jmol.User.viewUpdatedCallback
+        // with msg="updateAtomPick" rather than a statusChangedCallback.
+        window.Jmol.User.viewUpdatedCallback = (applet, msg) => {
+          if (msg !== 'updateAtomPick' || applet !== appletRef.current) return
+          if (!window.Jmol || !appletRef.current) return
+          try {
+            const json = window.Jmol.getPropertyAsString(appletRef.current, 'atomInfo', '{selected}')
+            if (!json) return
+            const data = JSON.parse(json) as { atoms?: { group: string; resno: number; chain: string; atomName: string }[] }
+            const atoms = data?.atoms
+            if (!atoms || atoms.length === 0) return
+            const lines = atoms.map(a => `[${a.group}]${a.resno}:${a.chain}  ${a.atomName}`).join('\n')
+            setConsoleLog(prev => [...prev, { type: 'output', text: lines }])
+          } catch {
+            // ignore parse errors
           }
         }
-
-        Info.statusChangedCallback = callbackName
-
-        appletRef.current = window.Jmol.getApplet(appletName, Info)
 
         if (containerRef.current && appletRef.current) {
           containerRef.current.innerHTML = window.Jmol.getAppletHtml(appletRef.current)
@@ -414,9 +413,8 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   useEffect(() => {
     if (!isOpen && appletRef.current) {
       appletRef.current = null
-      if (statusCallbackNameRef.current) {
-        delete (window as unknown as Record<string, unknown>)[statusCallbackNameRef.current]
-        statusCallbackNameRef.current = null
+      if (window.Jmol?.User) {
+        window.Jmol.User.viewUpdatedCallback = null
       }
     }
   }, [isOpen])
