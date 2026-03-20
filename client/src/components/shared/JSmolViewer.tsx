@@ -48,6 +48,7 @@ interface JSmolViewerProps {
   templateId?: string;
   onSubmit?: (templateId: string, file: File) => Promise<void>;
   groupId?: string;
+  dialogClassName?: string;
 }
 
 type DisplayStyle = 'cartoon' | 'ribbon' | 'trace' | 'wireframe' | 'spacefill' | 'ball+stick';
@@ -64,7 +65,7 @@ function stripLoadCommands(state: string): string {
     .join('\n')
 }
 
-export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, proteinPdbId, templateId, onSubmit, groupId }: JSmolViewerProps) {
+export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, proteinPdbId, templateId, onSubmit, groupId, dialogClassName }: JSmolViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const consoleRef = useRef<HTMLDivElement>(null)
   const consolePopoutRef = useRef<HTMLDivElement>(null)
@@ -829,7 +830,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   return (
     <>
     <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg shadow-xl max-w-5xl w-full mx-4 overflow-hidden max-h-[95vh] flex flex-col isolate">
+      <div className={`bg-white rounded-lg shadow-xl max-w-5xl w-full mx-4 overflow-hidden max-h-[95vh] flex flex-col isolate${dialogClassName ? ` ${dialogClassName}` : ''}`}>
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b bg-gray-50 shrink-0">
           <div>

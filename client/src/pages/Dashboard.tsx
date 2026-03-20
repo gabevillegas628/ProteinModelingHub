@@ -4,6 +4,7 @@ import * as instructorApi from '../services/instructorApi'
 import InstructorSubmissionsTab from '../components/instructor/SubmissionsTab'
 import InstructorLiteratureTab from '../components/instructor/LiteratureTab'
 import InstructorDiscussionTab from '../components/instructor/DiscussionTab'
+import JSmolViewer from '../components/shared/JSmolViewer'
 
 type TabType = 'submissions' | 'literature' | 'discussion'
 
@@ -14,6 +15,7 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<TabType>('submissions')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [blankViewerOpen, setBlankViewerOpen] = useState(false)
 
   useEffect(() => {
     loadGroups()
@@ -79,12 +81,23 @@ export default function Dashboard() {
             <span className="bg-green-600 text-white text-sm px-3 py-1 rounded-full">
               {user.role}
             </span>
-            <button
-              onClick={logout}
-              className="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
-            >
-              Logout
-            </button>
+            <div className="flex flex-col items-end gap-1">
+              <button
+                onClick={logout}
+                className="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
+              >
+                Logout
+              </button>
+              <button
+                onClick={() => setBlankViewerOpen(true)}
+                className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" />
+                </svg>
+                Open Viewer
+              </button>
+            </div>
           </div>
         </div>
       </header>
@@ -202,6 +215,13 @@ export default function Dashboard() {
           )}
         </main>
       </div>
+      <JSmolViewer
+        isOpen={blankViewerOpen}
+        onClose={() => setBlankViewerOpen(false)}
+        fileUrl=""
+        modelName="Viewer"
+        dialogClassName="min-h-[85vh]"
+      />
     </div>
   )
 }
