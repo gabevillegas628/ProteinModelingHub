@@ -17,14 +17,13 @@ export default function ApplicationsTab() {
 
   useEffect(() => {
     loadApplications()
-  }, [filter])
+  }, [])
 
   const loadApplications = async () => {
     try {
       setLoading(true)
       setError('')
-      const status = filter === 'ALL' ? undefined : filter
-      const data = await adminApi.getApplications(status)
+      const data = await adminApi.getApplications()
       setApplications(data)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load applications')
@@ -32,6 +31,8 @@ export default function ApplicationsTab() {
       setLoading(false)
     }
   }
+
+  const displayedApplications = filter === 'ALL' ? applications : applications.filter(a => a.status === filter)
 
   const handleApprove = async (id: string) => {
     setActionLoading(id)
@@ -79,7 +80,12 @@ export default function ApplicationsTab() {
     }
   }
 
-  const pendingCount = applications.filter(a => a.status === 'PENDING').length
+  const counts = {
+    PENDING: applications.filter(a => a.status === 'PENDING').length,
+    APPROVED: applications.filter(a => a.status === 'APPROVED').length,
+    REJECTED: applications.filter(a => a.status === 'REJECTED').length,
+    ALL: applications.length,
+  }
 
   const statusBadge = (status: string) => {
     const styles: Record<string, string> = {
@@ -94,11 +100,11 @@ export default function ApplicationsTab() {
     )
   }
 
-  const filterButtons: { key: FilterStatus; label: string }[] = [
-    { key: 'PENDING', label: `Pending${filter !== 'PENDING' && pendingCount > 0 ? ` (${pendingCount})` : ''}` },
-    { key: 'APPROVED', label: 'Approved' },
-    { key: 'REJECTED', label: 'Rejected' },
-    { key: 'ALL', label: 'All' },
+  const filterButtons: { key: FilterStatus; label: string; badgeClass: string }[] = [
+    { key: 'PENDING', label: 'Pending', badgeClass: 'bg-yellow-400 text-yellow-900' },
+    { key: 'APPROVED', label: 'Approved', badgeClass: 'bg-green-400 text-green-900' },
+    { key: 'REJECTED', label: 'Rejected', badgeClass: 'bg-red-400 text-red-900' },
+    { key: 'ALL', label: 'All', badgeClass: 'bg-gray-300 text-gray-800' },
   ]
 
   return (
@@ -119,22 +125,20 @@ export default function ApplicationsTab() {
 
       {/* Filter buttons */}
       <div className="flex gap-2 mb-6">
-        {filterButtons.map(({ key, label }) => (
+        {filterButtons.map(({ key, label, badgeClass }) => (
           <button
             key={key}
             onClick={() => setFilter(key)}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
               filter === key
                 ? 'bg-blue-600 text-white'
                 : 'bg-white text-gray-600 border border-gray-300 hover:bg-gray-50'
             }`}
           >
             {label}
-            {key === 'PENDING' && filter !== 'PENDING' && pendingCount > 0 && (
-              <span className="ml-1.5 bg-yellow-400 text-yellow-900 text-xs px-1.5 py-0.5 rounded-full font-bold">
-                {pendingCount}
-              </span>
-            )}
+            <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${badgeClass}`}>
+              {counts[key]}
+            </span>
           </button>
         ))}
       </div>
@@ -143,13 +147,13 @@ export default function ApplicationsTab() {
         <div className="flex justify-center py-12">
           <div className="w-8 h-8 border-2 border-blue-600 border-t-transparent rounded-full animate-spin" />
         </div>
-      ) : applications.length === 0 ? (
+      ) : displayedApplications.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-xl border border-gray-200">
           <p className="text-gray-500">No {filter !== 'ALL' ? filter.toLowerCase() : ''} applications found.</p>
         </div>
       ) : (
         <div className="space-y-4">
-          {applications.map((app) => (
+          {displayedApplications.map((app) => (
             <div key={app.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
               {/* Card header */}
               <div className="p-5">
@@ -308,13 +312,13 @@ export default function ApplicationsTab() {
         </div>
       )}
 
-      {/* Reject modal */}
+      {/* Delete modal */}
       {deletingId && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-sm w-full p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Delete Application</h3>
             <p className="text-sm text-gray-500 mb-6">
-              This will permanently delete the application and its PDF. This cannot be undone.
+              This will permanently delete the application and its PDF. This cannot be undone. To keep a record, use Reject instead.
             </p>
             <div className="flex gap-3 justify-end">
               <button
@@ -338,12 +342,13 @@ export default function ApplicationsTab() {
         </div>
       )}
 
+      {/* Reject modal */}
       {rejectingId && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Reject Application</h3>
             <p className="text-sm text-gray-500 mb-4">
-              Optionally provide a reason for rejection. This is for your records only.
+              The application will be marked as rejected but kept on record. Optionally provide a reason.
             </p>
             <textarea
               value={rejectReason}
