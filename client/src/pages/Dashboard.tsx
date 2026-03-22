@@ -76,28 +76,28 @@ export default function Dashboard() {
       <header className="bg-white shadow shrink-0">
         <div className="max-w-full mx-auto px-4 py-4 flex justify-between items-center">
           <h1 className="text-xl font-bold text-gray-800">Protein Model Organizer</h1>
-          <div className="flex items-center gap-4">
-            <span className="text-gray-600">{user.firstName} {user.lastName}</span>
-            <span className="bg-green-600 text-white text-sm px-3 py-1 rounded-full">
-              {user.role}
-            </span>
-            <div className="flex flex-col items-end gap-1">
+          <div className="flex flex-col items-end gap-2">
+            <div className="flex items-center gap-4">
+              <span className="text-gray-600">{user.firstName} {user.lastName}</span>
+              <span className="bg-green-600 text-white text-sm px-3 py-1 rounded-full">
+                {user.role}
+              </span>
               <button
                 onClick={logout}
                 className="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
               >
                 Logout
               </button>
-              <button
-                onClick={() => setBlankViewerOpen(true)}
-                className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition-colors"
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" />
-                </svg>
-                Open Viewer
-              </button>
             </div>
+            <button
+              onClick={() => setBlankViewerOpen(true)}
+              className="flex items-center gap-2 bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors text-sm"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" />
+              </svg>
+              Open 3D Viewer
+            </button>
           </div>
         </div>
       </header>
