@@ -182,6 +182,7 @@ export default function SummaryTab({ groups }: Props) {
       setLoadingSubmissions(false)
       return
     }
+    setCollapsedGroups(new Set(groups.map(g => g.id)))
     setLoadingSubmissions(true)
     Promise.all(groups.map(g => instructorApi.getGroupSubmissions(g.id)))
       .then(results => {
