@@ -184,6 +184,10 @@ export function deleteUser(id: string): Promise<{ success: boolean }> {
   return request(`/users/${id}`, { method: 'DELETE' });
 }
 
+export function generateSetupLink(id: string): Promise<{ setupLink: string; email: string; firstName: string; lastName: string }> {
+  return request(`/users/${id}/setup-link`, { method: 'POST' });
+}
+
 // ============================================
 // Nuclear Reset
 // ============================================

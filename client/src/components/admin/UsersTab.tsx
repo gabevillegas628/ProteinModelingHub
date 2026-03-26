@@ -16,6 +16,8 @@ export default function UsersTab() {
     password: ''
   })
   const [filter, setFilter] = useState<'all' | 'pending'>('all')
+  const [linkLoading, setLinkLoading] = useState<string | null>(null)
+  const [linkCopied, setLinkCopied] = useState<string | null>(null)
 
   useEffect(() => {
     loadUsers()
@@ -73,6 +75,27 @@ export default function UsersTab() {
       loadUsers()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update user')
+    }
+  }
+
+  const handleSendLoginLink = async (user: adminApi.User) => {
+    setLinkLoading(user.id)
+    try {
+      const { setupLink, firstName } = await adminApi.generateSetupLink(user.id)
+      const message =
+        `Hi ${firstName},\n\n` +
+        `Your account for the WSSP Protein Modeling Platform is ready.\n\n` +
+        `Click the link below to set your password and log in:\n\n` +
+        `${setupLink}\n\n` +
+        `This link expires in 48 hours.\n\n` +
+        `If you have any trouble, reply to this email.`
+      await navigator.clipboard.writeText(message)
+      setLinkCopied(user.id)
+      setTimeout(() => setLinkCopied(null), 2500)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to generate login link')
+    } finally {
+      setLinkLoading(null)
     }
   }
 
@@ -247,6 +270,9 @@ export default function UsersTab() {
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Group
                 </th>
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Resend Setup
+                </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Actions
                 </th>
@@ -279,6 +305,21 @@ export default function UsersTab() {
                     {user.groupMemberships && user.groupMemberships.length > 0
                       ? user.groupMemberships.map(m => m.group.name).join(', ')
                       : '-'}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm">
+                    {user.role === 'STUDENT' && (
+                      <button
+                        onClick={() => handleSendLoginLink(user)}
+                        disabled={linkLoading === user.id}
+                        className={`px-3 py-1 rounded text-xs font-medium transition-colors disabled:opacity-40 ${
+                          linkCopied === user.id
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-gray-100 text-gray-600 hover:bg-indigo-50 hover:text-indigo-700'
+                        }`}
+                      >
+                        {linkLoading === user.id ? 'Generating...' : linkCopied === user.id ? 'Copied!' : 'Copy instructions'}
+                      </button>
+                    )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm">
                     {!user.isApproved && (

@@ -1004,6 +1004,39 @@ router.delete('/applications/:id', async (req: Request, res: Response) => {
   }
 });
 
+// Generate a fresh password-setup link for any user (admin use, no email sent)
+router.post('/users/:id/setup-link', async (req: Request, res: Response) => {
+  try {
+    const id = req.params.id as string;
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+      select: { id: true, email: true, firstName: true, lastName: true, isApproved: true },
+    });
+
+    if (!user) {
+      res.status(404).json({ error: 'User not found' });
+      return;
+    }
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000); // 48 hours
+
+    await prisma.user.update({
+      where: { id },
+      data: { passwordResetToken: token, passwordResetExpires: expiresAt },
+    });
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const setupLink = `${frontendUrl}/reset-password?token=${token}`;
+
+    res.json({ setupLink, email: user.email, firstName: user.firstName, lastName: user.lastName });
+  } catch (error) {
+    console.error('Error generating setup link:', error);
+    res.status(500).json({ error: 'Failed to generate setup link' });
+  }
+});
+
 // Reject application
 router.post('/applications/:id/reject', async (req: Request, res: Response) => {
   try {
