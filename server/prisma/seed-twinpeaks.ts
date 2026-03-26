@@ -58,6 +58,37 @@ async function main() {
   [MODELS_DIR, LITERATURE_DIR, APPLICATIONS_DIR].forEach(d => fs.mkdirSync(d, { recursive: true }));
 
   // ------------------------------------------------------------------
+  // 0. Idempotent cleanup — delete any previous Twin Peaks seed data
+  // ------------------------------------------------------------------
+  const existingUsers = await prisma.user.findMany({
+    where: { email: { in: ['laura.palmer@twinpeaks.edu', 'dale.cooper@twinpeaks.edu'] } },
+    select: { id: true }
+  });
+  const existingUserIds = existingUsers.map(u => u.id);
+
+  if (existingUserIds.length > 0) {
+    const existingGroups = await prisma.group.findMany({
+      where: { schoolName: 'Twin Peaks High School' },
+      select: { id: true }
+    });
+    const existingGroupIds = existingGroups.map(g => g.id);
+
+    // Delete in dependency order
+    if (existingGroupIds.length > 0) {
+      await prisma.viewerSession.deleteMany({ where: { groupId: { in: existingGroupIds } } });
+      await prisma.message.deleteMany({ where: { groupId: { in: existingGroupIds } } });
+      await prisma.literature.deleteMany({ where: { groupId: { in: existingGroupIds } } });
+      await prisma.submission.deleteMany({ where: { groupId: { in: existingGroupIds } } });
+      await prisma.groupMember.deleteMany({ where: { groupId: { in: existingGroupIds } } });
+      await prisma.group.deleteMany({ where: { id: { in: existingGroupIds } } });
+    }
+    await prisma.loginEvent.deleteMany({ where: { userId: { in: existingUserIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: existingUserIds } } });
+    await prisma.application.deleteMany({ where: { schoolName: 'Twin Peaks High School' } });
+    console.log('✓ Cleaned up previous Twin Peaks seed data');
+  }
+
+  // ------------------------------------------------------------------
   // 1. Application record (the paper trail of how they got in)
   // ------------------------------------------------------------------
   const pdfFilename = `seed-twinpeaks-${Date.now()}.pdf`;
@@ -135,6 +166,8 @@ async function main() {
       teacherEmail: 'margaret.lanterman@twinpeaks.edu',
       researchArticleCitation:
         'Wing R et al. (1980) Crystal structure analysis of a complete turn of B-DNA. Nature 287:755–758.',
+      // Group "started" 30 days ago to match the oldest seeded activity
+      createdAt: daysAgo(30),
       // Set last review request to 5 days ago
       lastReviewRequestedAt: daysAgo(5),
     },

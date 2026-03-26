@@ -43,6 +43,9 @@ interface SparkChartProps {
 }
 
 function SparkChart({ data, memberIds, title, valueFormatter, memberNames }: SparkChartProps) {
+  // ~1 label per week regardless of total days
+  const tickInterval = Math.max(1, Math.round(data.length / 7) - 1)
+
   return (
     <div>
       <p className="text-xl font-medium text-gray-600 mb-1">{title}</p>
@@ -53,7 +56,7 @@ function SparkChart({ data, memberIds, title, valueFormatter, memberNames }: Spa
             tick={{ fontSize: 13, fill: '#9ca3af' }}
             tickLine={false}
             axisLine={{ stroke: '#4b5563' }}
-            interval={6}
+            interval={tickInterval}
           />
           <YAxis
             tick={{ fontSize: 13, fill: '#9ca3af' }}

@@ -330,15 +330,24 @@ router.get('/groups/:groupId/activity', async (req: AuthRequest, res: Response) 
       include: { user: { select: { id: true, firstName: true, lastName: true } } }
     });
 
-    // Build a 30-day window, oldest first
-    const DAYS = 30;
+    // Dynamic window: group creation → today
+    const group = await prisma.group.findUnique({ where: { id: groupId }, select: { createdAt: true } });
     const now = new Date();
-    const windowStart = new Date(now.getTime() - DAYS * 24 * 60 * 60 * 1000);
+    const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const windowStart = group?.createdAt && group.createdAt > thirtyDaysAgo
+      ? group.createdAt
+      : thirtyDaysAgo;
 
-    // Generate array of ISO date strings "YYYY-MM-DD" for the window
+    // Normalise windowStart to midnight so the first day bucket is complete
+    windowStart.setHours(0, 0, 0, 0);
+
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const DAYS = Math.ceil((now.getTime() - windowStart.getTime()) / msPerDay) + 1;
+
+    // Generate array of ISO date strings "YYYY-MM-DD" for the window, oldest first
     const days: string[] = [];
-    for (let i = DAYS - 1; i >= 0; i--) {
-      const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+    for (let i = 0; i < DAYS; i++) {
+      const d = new Date(windowStart.getTime() + i * msPerDay);
       days.push(d.toISOString().slice(0, 10));
     }
 
