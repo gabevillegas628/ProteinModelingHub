@@ -47,6 +47,7 @@ export interface ModelTemplate {
   description: string | null;
   orderIndex: number;
   isActive: boolean;
+  unlocksAt: string | null;
 }
 
 export interface Submission {

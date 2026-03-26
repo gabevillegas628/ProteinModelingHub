@@ -43,7 +43,7 @@ router.get('/model-templates', async (req: Request, res: Response) => {
 // Create model template
 router.post('/model-templates', async (req: Request, res: Response) => {
   try {
-    const { name, description } = req.body;
+    const { name, description, unlocksAt } = req.body;
 
     // Get the highest orderIndex
     const lastTemplate = await prisma.modelTemplate.findFirst({
@@ -52,7 +52,7 @@ router.post('/model-templates', async (req: Request, res: Response) => {
     const orderIndex = (lastTemplate?.orderIndex ?? -1) + 1;
 
     const template = await prisma.modelTemplate.create({
-      data: { name, description, orderIndex },
+      data: { name, description, orderIndex, unlocksAt: unlocksAt ? new Date(unlocksAt) : null },
     });
     res.status(201).json(template);
   } catch (error) {
@@ -65,11 +65,17 @@ router.post('/model-templates', async (req: Request, res: Response) => {
 router.put('/model-templates/:id', async (req: Request, res: Response) => {
   try {
     const id = req.params.id as string;
-    const { name, description, orderIndex, isActive } = req.body;
+    const { name, description, orderIndex, isActive, unlocksAt } = req.body;
 
     const template = await prisma.modelTemplate.update({
       where: { id },
-      data: { name, description, orderIndex, isActive },
+      data: {
+        name,
+        description,
+        orderIndex,
+        isActive,
+        unlocksAt: unlocksAt !== undefined ? (unlocksAt ? new Date(unlocksAt) : null) : undefined,
+      },
     });
     res.json(template);
   } catch (error) {

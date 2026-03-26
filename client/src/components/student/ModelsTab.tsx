@@ -334,6 +334,8 @@ export default function ModelsTab() {
     )
   }
 
+  const visibleModels = data.models.filter(m => !m.unlocksAt || new Date(m.unlocksAt) <= new Date())
+
   return (
     <div>
       <div className="mb-6 flex justify-between items-start">
@@ -392,6 +394,7 @@ export default function ModelsTab() {
         </div>
 
         {/* Request Review Section */}
+        {visibleModels.length > 0 && (
         <div className="flex flex-col items-end gap-2">
           <button
             onClick={handleRequestReview}
@@ -424,6 +427,7 @@ export default function ModelsTab() {
             </span>
           )}
         </div>
+        )}
       </div>
 
       {/* Review Request Message */}
@@ -443,13 +447,15 @@ export default function ModelsTab() {
         </div>
       )}
 
-      {data.models.length === 0 ? (
+      {visibleModels.length === 0 ? (
         <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
-          No model templates have been created yet. Please wait for an administrator to set them up.
+          {data.models.length === 0
+            ? 'No model templates have been created yet. Please wait for an administrator to set them up.'
+            : 'No models are available yet. Check back later.'}
         </div>
       ) : (
         <div className="grid gap-4">
-          {data.models.map((model) => (
+          {visibleModels.map((model) => (
             <div key={model.id} className="bg-white rounded-lg shadow p-6">
               <div className="flex justify-between items-start">
                 <div className="flex-1">

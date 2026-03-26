@@ -242,6 +242,13 @@ router.post('/models/:templateId/upload', modelUpload.single('file'), async (req
       return;
     }
 
+    // Check lockout
+    if (template.unlocksAt && new Date() < template.unlocksAt) {
+      fs.unlinkSync(file.path);
+      res.status(403).json({ error: `This model is locked until ${template.unlocksAt.toISOString()}` });
+      return;
+    }
+
     // Find existing submission for this template
     const existingSubmission = await prisma.submission.findFirst({
       where: {

@@ -62,13 +62,14 @@ model User {
 // e.g., "Model 1: Active Site View", "Model 2: Secondary Structure"
 // ============================================
 model ModelTemplate {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   name        String
   description String?
-  orderIndex  Int      @default(0)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  orderIndex  Int       @default(0)
+  isActive    Boolean   @default(true)
+  unlocksAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   // Relations
   submissions  Submission[]
