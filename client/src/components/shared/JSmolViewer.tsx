@@ -320,8 +320,41 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
           disableInitialConsole: true,
           allowJavaScript: true,
           readyFunction: () => {
-            setLoading(false)
             appletReadyRef.current = true
+            if (appletRef.current && window.Jmol) {
+              // Register callbacks now that the applet is ready
+              window.Jmol.setCallback(appletRef.current!, 'pick', pickCbName)
+              window.Jmol.setCallback(appletRef.current!, 'script', scriptCbName)
+
+              // Set up base rendering settings
+              const baseSettings = `
+                set antialiasDisplay ON;
+                set antialiastranslucent ON;
+                set platformSpeed 3;
+              `
+
+              // Load the model - either from a saved PNGJ file or fresh from RCSB PDB
+              const loadCommand = fileUrl
+                ? `load "${fileUrl}";`
+                : proteinPdbId
+                  ? `load =${proteinPdbId}; cartoon only; color structure;`
+                  : ''
+
+              window.Jmol.script(appletRef.current!, `
+                ${baseSettings}
+                ${loadCommand}
+              `)
+
+              // Store original state for reset functionality
+              if (fileUrl) {
+                setHasOriginalState(true)
+                originalStateRef.current = { stateCommands: `load "${fileUrl}";` }
+              } else if (proteinPdbId) {
+                setHasOriginalState(true)
+                originalStateRef.current = { stateCommands: `load =${proteinPdbId}; cartoon only; color structure;` }
+              }
+            }
+            setLoading(false)
           }
         }
 
@@ -354,42 +387,6 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
         if (containerRef.current && appletRef.current) {
           containerRef.current.innerHTML = window.Jmol.getAppletHtml(appletRef.current)
-
-          setTimeout(() => {
-            if (appletRef.current && window.Jmol) {
-              // Register callbacks now that the applet is initialised
-              window.Jmol.setCallback(appletRef.current!, 'pick', pickCbName)
-              window.Jmol.setCallback(appletRef.current!, 'script', scriptCbName)
-
-              // Set up base rendering settings
-              const baseSettings = `
-                set antialiasDisplay ON;
-                set antialiastranslucent ON;
-                set platformSpeed 3;
-              `
-
-              // Load the model - either from a saved PNGJ file or fresh from RCSB PDB
-              const loadCommand = fileUrl
-                ? `load "${fileUrl}";`
-                : proteinPdbId
-                  ? `load =${proteinPdbId}; cartoon only; color structure;`
-                  : ''
-
-              window.Jmol.script(appletRef.current!, `
-                ${baseSettings}
-                ${loadCommand}
-              `)
-
-              // Store original state for reset functionality
-              if (fileUrl) {
-                setHasOriginalState(true)
-                originalStateRef.current = { stateCommands: `load "${fileUrl}";` }
-              } else if (proteinPdbId) {
-                setHasOriginalState(true)
-                originalStateRef.current = { stateCommands: `load =${proteinPdbId}; cartoon only; color structure;` }
-              }
-            }
-          }, 500)
         }
       } catch (err) {
         console.error('Error initializing JSmol:', err)

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import * as adminApi from '../../services/adminApi'
+import JSmolViewer from '../shared/JSmolViewer'
 
 type FilterStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'ALL'
 
@@ -14,6 +15,7 @@ export default function ApplicationsTab() {
   const [rejectReason, setRejectReason] = useState('')
   const [previewId, setPreviewId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [viewerApp, setViewerApp] = useState<adminApi.Application | null>(null)
 
   useEffect(() => {
     loadApplications()
@@ -224,6 +226,26 @@ export default function ApplicationsTab() {
                           hour: 'numeric', minute: '2-digit', hour12: true
                         })}
                       </p>
+                      <div className="flex flex-wrap gap-2 pt-1.5">
+                        <button
+                          onClick={() => setPreviewId(app.id)}
+                          className="px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
+                        >
+                          Preview PDF
+                        </button>
+                        <button
+                          onClick={() => setExpandedId(expandedId === app.id ? null : app.id)}
+                          className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
+                        >
+                          {expandedId === app.id ? 'Hide Details' : 'View Details'}
+                        </button>
+                        <button
+                          onClick={() => setViewerApp(app)}
+                          className="px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 border border-purple-200 rounded-lg hover:bg-purple-100 transition-colors"
+                        >
+                          View in 3D
+                        </button>
+                      </div>
                     </div>
                     {app.status === 'REJECTED' && app.rejectionReason && (
                       <p className="mt-2 text-sm text-red-600 bg-red-50 px-3 py-1.5 rounded">
@@ -239,18 +261,6 @@ export default function ApplicationsTab() {
 
                   {/* Action buttons */}
                   <div className="flex flex-col gap-2 shrink-0">
-                    <button
-                      onClick={() => setPreviewId(app.id)}
-                      className="text-center px-3 py-1.5 text-xs font-medium text-blue-700 bg-blue-50 border border-blue-200 rounded-lg hover:bg-blue-100 transition-colors"
-                    >
-                      Preview PDF
-                    </button>
-                    <button
-                      onClick={() => setExpandedId(expandedId === app.id ? null : app.id)}
-                      className="px-3 py-1.5 text-xs font-medium text-gray-600 bg-gray-50 border border-gray-200 rounded-lg hover:bg-gray-100 transition-colors"
-                    >
-                      {expandedId === app.id ? 'Hide Details' : 'View Details'}
-                    </button>
                     {app.status === 'PENDING' && (
                       <>
                         <button
@@ -321,6 +331,17 @@ export default function ApplicationsTab() {
             </div>
           ))}
         </div>
+      )}
+
+      {/* 3D Viewer Modal */}
+      {viewerApp && (
+        <JSmolViewer
+          isOpen={true}
+          onClose={() => setViewerApp(null)}
+          fileUrl=""
+          modelName={viewerApp.proteinName}
+          proteinPdbId={viewerApp.pdbAccessionNumber}
+        />
       )}
 
       {/* PDF preview modal */}
