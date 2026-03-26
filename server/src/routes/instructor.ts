@@ -37,15 +37,27 @@ router.get('/groups', async (req: AuthRequest, res: Response) => {
       }
     });
 
+    const activeTemplateCount = await prisma.modelTemplate.count({ where: { isActive: true } });
+
     // Get submission counts for each group
     const groupsWithStats = await Promise.all(
       groups.map(async (group) => {
-        const submissionCount = await prisma.submission.count({
-          where: { groupId: group.id }
+        // Count distinct templates this group has formally submitted (excludes DRAFT)
+        const submittedTemplates = await prisma.submission.findMany({
+          where: { groupId: group.id, status: { not: 'DRAFT' } },
+          select: { modelTemplateId: true },
+          distinct: ['modelTemplateId'],
         });
-        const pendingCount = await prisma.submission.count({
-          where: { groupId: group.id, status: 'SUBMITTED' }
+        const submissionCount = submittedTemplates.length;
+
+        // Count distinct templates currently awaiting instructor review
+        const pendingTemplates = await prisma.submission.findMany({
+          where: { groupId: group.id, status: 'SUBMITTED' },
+          select: { modelTemplateId: true },
+          distinct: ['modelTemplateId'],
         });
+        const pendingCount = pendingTemplates.length;
+
         const memberCount = await prisma.groupMember.count({
           where: { groupId: group.id }
         });
@@ -65,7 +77,8 @@ router.get('/groups', async (req: AuthRequest, res: Response) => {
           submissionCount,
           pendingCount,
           memberCount,
-          unreadMessageCount
+          unreadMessageCount,
+          activeTemplateCount,
         };
       })
     );
@@ -305,6 +318,98 @@ router.get('/literature/file/:id', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Error fetching literature file:', error);
     res.status(500).json({ error: 'Failed to fetch literature file' });
+  }
+});
+
+// GET /groups/:groupId/activity — time-series + summary effort data for all group members
+router.get('/groups/:groupId/activity', async (req: AuthRequest, res: Response) => {
+  try {
+    const groupId = req.params.groupId as string;
+    const members = await prisma.groupMember.findMany({
+      where: { groupId },
+      include: { user: { select: { id: true, firstName: true, lastName: true } } }
+    });
+
+    // Build a 30-day window, oldest first
+    const DAYS = 30;
+    const now = new Date();
+    const windowStart = new Date(now.getTime() - DAYS * 24 * 60 * 60 * 1000);
+
+    // Generate array of ISO date strings "YYYY-MM-DD" for the window
+    const days: string[] = [];
+    for (let i = DAYS - 1; i >= 0; i--) {
+      const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+      days.push(d.toISOString().slice(0, 10));
+    }
+
+    // Helper: bucket an array of timestamps into daily counts
+    function bucketByDay(dates: Date[]): Record<string, number> {
+      const counts: Record<string, number> = {};
+      for (const d of dates) {
+        const key = d.toISOString().slice(0, 10);
+        counts[key] = (counts[key] ?? 0) + 1;
+      }
+      return counts;
+    }
+
+    // Helper: bucket viewer sessions into daily minutes
+    function bucketViewerMinutes(sessions: { startedAt: Date; endedAt: Date | null }[]): Record<string, number> {
+      const minutes: Record<string, number> = {};
+      for (const s of sessions) {
+        if (!s.endedAt) continue;
+        const key = s.startedAt.toISOString().slice(0, 10);
+        const mins = Math.round((s.endedAt.getTime() - s.startedAt.getTime()) / 60000);
+        minutes[key] = (minutes[key] ?? 0) + mins;
+      }
+      return minutes;
+    }
+
+    const memberStats = await Promise.all(members.map(async (m) => {
+      const userId = m.userId;
+      const user = (m as typeof m & { user: { firstName: string; lastName: string } }).user;
+
+      const [loginEvents, viewerSessions, messages, literatureCount, submissionCount] =
+        await Promise.all([
+          prisma.loginEvent.findMany({
+            where: { userId, createdAt: { gte: windowStart } },
+            select: { createdAt: true },
+            orderBy: { createdAt: 'asc' }
+          }),
+          prisma.viewerSession.findMany({
+            where: { groupId, userId, startedAt: { gte: windowStart } },
+            select: { startedAt: true, endedAt: true },
+            orderBy: { startedAt: 'asc' }
+          }),
+          prisma.message.findMany({
+            where: { userId, groupId, createdAt: { gte: windowStart } },
+            select: { createdAt: true },
+            orderBy: { createdAt: 'asc' }
+          }),
+          prisma.literature.count({ where: { uploadedById: userId, groupId } }),
+          prisma.submission.count({ where: { submittedById: userId, groupId, status: { not: 'DRAFT' } } })
+        ]);
+
+      const loginBuckets = bucketByDay(loginEvents.map(e => e.createdAt));
+      const viewerBuckets = bucketViewerMinutes(viewerSessions);
+      const messageBuckets = bucketByDay(messages.map(e => e.createdAt));
+
+      return {
+        userId,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        literatureCount,
+        submissionCount,
+        // Parallel arrays aligned to `days`
+        logins: days.map(d => loginBuckets[d] ?? 0),
+        viewerMinutes: days.map(d => viewerBuckets[d] ?? 0),
+        messages: days.map(d => messageBuckets[d] ?? 0),
+      };
+    }));
+
+    res.json({ days, members: memberStats });
+  } catch (error) {
+    console.error('Error fetching group activity:', error);
+    res.status(500).json({ error: 'Failed to fetch activity data' });
   }
 });
 

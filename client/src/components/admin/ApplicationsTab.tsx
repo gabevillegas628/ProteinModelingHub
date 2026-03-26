@@ -80,6 +80,43 @@ export default function ApplicationsTab() {
     }
   }
 
+  const exportCsv = () => {
+    const rows = displayedApplications
+    const headers = [
+      'Status', 'School Name', 'WSSP #',
+      'Student A First', 'Student A Last', 'Student A Email',
+      'Student B First', 'Student B Last', 'Student B Email',
+      'Teacher Name', 'Teacher Email',
+      'Protein Name', 'PDB Accession', 'Clone #', 'Sequence Identity (%)',
+      'Research Article Citation', 'PDF File Name',
+      'Rejection Reason', 'Group Name', 'Submitted At',
+    ]
+    const escape = (v: unknown) => {
+      const s = v == null ? '' : String(v)
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
+    }
+    const csvRows = [
+      headers.join(','),
+      ...rows.map(a => [
+        a.status, a.schoolName, a.wsspSchoolNumber,
+        a.studentAFirstName, a.studentALastName, a.studentAEmail,
+        a.studentBFirstName, a.studentBLastName, a.studentBEmail,
+        a.teacherName, a.teacherEmail,
+        a.proteinName, a.pdbAccessionNumber, a.cloneNumber, a.sequenceIdentity,
+        a.researchArticleCitation, a.pdfFileName,
+        a.rejectionReason ?? '', a.group?.name ?? '',
+        new Date(a.createdAt).toISOString(),
+      ].map(escape).join(',')),
+    ]
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `applications-${filter.toLowerCase()}-${new Date().toISOString().slice(0, 10)}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   const counts = {
     PENDING: applications.filter(a => a.status === 'PENDING').length,
     APPROVED: applications.filter(a => a.status === 'APPROVED').length,
@@ -114,6 +151,13 @@ export default function ApplicationsTab() {
           <h2 className="text-xl font-semibold text-gray-800">Applications</h2>
           <p className="text-sm text-gray-500 mt-1">Review and approve student team applications</p>
         </div>
+        <button
+          onClick={exportCsv}
+          disabled={applications.length === 0}
+          className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50 transition-colors"
+        >
+          Export CSV
+        </button>
       </div>
 
       {error && (

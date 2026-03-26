@@ -181,6 +181,9 @@ router.post('/login', async (req: Request<{}, {}, LoginBody>, res: Response) => 
       { expiresIn: JWT_EXPIRES_IN }
     );
 
+    // Fire-and-forget — don't block the login response
+    prisma.loginEvent.create({ data: { userId: user.id } }).catch(() => {});
+
     res.json({
       user: {
         id: user.id,

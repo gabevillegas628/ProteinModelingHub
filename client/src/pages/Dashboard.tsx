@@ -4,6 +4,7 @@ import * as instructorApi from '../services/instructorApi'
 import InstructorSubmissionsTab from '../components/instructor/SubmissionsTab'
 import InstructorLiteratureTab from '../components/instructor/LiteratureTab'
 import InstructorDiscussionTab from '../components/instructor/DiscussionTab'
+import InstructorSummaryTab from '../components/instructor/SummaryTab'
 import JSmolViewer from '../components/shared/JSmolViewer'
 
 type TabType = 'submissions' | 'literature' | 'discussion'
@@ -26,10 +27,7 @@ export default function Dashboard() {
       setLoading(true)
       const data = await instructorApi.getGroups()
       setGroups(data)
-      if (data.length > 0) {
-        setSelectedGroupId(data[0].id)
-      }
-    } catch (err) {
+      } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load groups')
     } finally {
       setLoading(false)
@@ -122,6 +120,16 @@ export default function Dashboard() {
             </div>
           ) : (
             <nav className="flex-1 overflow-y-auto">
+              <button
+                onClick={() => setSelectedGroupId(null)}
+                className={`w-full text-left px-4 py-3 border-b border-gray-100 text-sm font-medium transition-colors ${
+                  selectedGroupId === null
+                    ? 'bg-blue-50 border-l-4 border-l-blue-600 text-blue-700'
+                    : 'text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                Overview
+              </button>
               {groups.map((group) => (
                 <button
                   key={group.id}
@@ -209,8 +217,8 @@ export default function Dashboard() {
               </div>
             </>
           ) : (
-            <div className="flex-1 flex items-center justify-center text-gray-500">
-              {loading ? 'Loading...' : 'Select a group to view its content'}
+            <div className="flex-1 overflow-y-auto">
+              <InstructorSummaryTab groups={groups} />
             </div>
           )}
         </main>

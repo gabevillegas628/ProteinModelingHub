@@ -50,6 +50,8 @@ model User {
   messageReadStatus      MessageReadStatus[]
   viewerChats            ViewerChat[]
   viewerChatReadStatuses ViewerChatReadStatus[]
+  loginEvents    LoginEvent[]
+  viewerSessions ViewerSession[]
 
   @@map("users")
 }
@@ -105,6 +107,7 @@ model Group {
   viewerChats            ViewerChat[]
   viewerChatReadStatuses ViewerChatReadStatus[]
   application            Application?
+  viewerSessions ViewerSession[]
 
   @@map("groups")
 }
@@ -302,4 +305,38 @@ model ViewerChatReadStatus {
   @@unique([userId, groupId, modelTemplateId])
   @@index([userId])
   @@map("viewer_chat_read_status")
+}
+
+// ============================================
+// LOGIN EVENT
+// Tracks each time a student logs in
+// ============================================
+model LoginEvent {
+  id        String   @id @default(cuid())
+  userId    String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@map("login_events")
+}
+
+// ============================================
+// VIEWER SESSION
+// Tracks time students spend in the JSmol viewer
+// ============================================
+model ViewerSession {
+  id        String    @id @default(cuid())
+  userId    String
+  groupId   String
+  startedAt DateTime  @default(now())
+  endedAt   DateTime?
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+  @@index([userId])
+  @@map("viewer_sessions")
 }

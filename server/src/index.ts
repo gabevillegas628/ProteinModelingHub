@@ -5,7 +5,9 @@ import { fileURLToPath } from 'url';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
 import dotenv from 'dotenv';
+import jwt from 'jsonwebtoken';
 import routes from './routes/index.js';
+import { prisma } from './lib/prisma.js';
 
 dotenv.config();
 
@@ -41,15 +43,46 @@ const io = new Server(httpServer, {
 interface PendingState { groupId: string; state: string; relayScheduled: boolean; timer: ReturnType<typeof setTimeout> }
 const pendingStates = new Map<string, PendingState>();
 
+async function closeViewerSession(socket: { data: Record<string, unknown> }) {
+  const sessionId = socket.data.viewerSessionId as string | undefined;
+  if (sessionId) {
+    await prisma.viewerSession.update({
+      where: { id: sessionId },
+      data: { endedAt: new Date() }
+    }).catch(() => {});
+    delete socket.data.viewerSessionId;
+  }
+}
+
 io.on('connection', (socket) => {
-  socket.on('join-group', (groupId: string) => {
-    socket.join(`group:${groupId}`);
+  // Identify user from auth token passed at socket connection time
+  let socketUserId: string | null = null;
+  const token = socket.handshake.auth?.token as string | undefined;
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as { userId: string };
+      socketUserId = decoded.userId;
+    } catch {}
+  }
+
+  socket.on('join-group', (syncRoomId: string) => {
+    socket.join(`group:${syncRoomId}`);
     // Tell existing room members a new peer has joined so they can re-broadcast
     // their current state, giving the newcomer an up-to-date view immediately.
-    socket.to(`group:${groupId}`).emit('peer-joined');
+    socket.to(`group:${syncRoomId}`).emit('peer-joined');
     // Broadcast updated room size to everyone (including the new joiner).
-    const count = io.sockets.adapter.rooms.get(`group:${groupId}`)?.size ?? 1;
-    io.to(`group:${groupId}`).emit('peer-count', count);
+    const count = io.sockets.adapter.rooms.get(`group:${syncRoomId}`)?.size ?? 1;
+    io.to(`group:${syncRoomId}`).emit('peer-count', count);
+
+    // Log viewer session start
+    if (socketUserId) {
+      const realGroupId = syncRoomId.split('::')[0];
+      prisma.viewerSession.create({
+        data: { userId: socketUserId, groupId: realGroupId }
+      }).then(session => {
+        socket.data.viewerSessionId = session.id;
+      }).catch(() => {});
+    }
   });
 
   socket.on('viewer-state', ({ groupId, state }: { groupId: string; state: string }) => {
@@ -75,10 +108,11 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('leave-group', (groupId: string) => {
-    socket.leave(`group:${groupId}`);
-    const count = io.sockets.adapter.rooms.get(`group:${groupId}`)?.size ?? 0;
-    io.to(`group:${groupId}`).emit('peer-count', count);
+  socket.on('leave-group', (syncRoomId: string) => {
+    socket.leave(`group:${syncRoomId}`);
+    const count = io.sockets.adapter.rooms.get(`group:${syncRoomId}`)?.size ?? 0;
+    io.to(`group:${syncRoomId}`).emit('peer-count', count);
+    closeViewerSession(socket);
   });
 
   // Use 'disconnecting' (not 'disconnect') so socket.rooms is still populated.
@@ -87,6 +121,7 @@ io.on('connection', (socket) => {
       if (room !== socket.id && room.startsWith('group:')) {
         const currentSize = io.sockets.adapter.rooms.get(room)?.size ?? 1;
         socket.to(room).emit('peer-count', currentSize - 1);
+        closeViewerSession(socket);
       }
     }
   });
