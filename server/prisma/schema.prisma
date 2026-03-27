@@ -47,6 +47,7 @@ model User {
   submissions            Submission[]
   messages               Message[]
   literature             Literature[]
+  presentations          Presentation[]
   messageReadStatus      MessageReadStatus[]
   viewerChats            ViewerChat[]
   viewerChatReadStatuses ViewerChatReadStatus[]
@@ -104,6 +105,7 @@ model Group {
   submissions            Submission[]
   messages               Message[]
   literature             Literature[]
+  presentations          Presentation[]
   messageReadStatus      MessageReadStatus[]
   viewerChats            ViewerChat[]
   viewerChatReadStatuses ViewerChatReadStatus[]
@@ -264,6 +266,30 @@ model Literature {
 
   @@index([groupId])
   @@map("literature")
+}
+
+// ============================================
+// PRESENTATIONS
+// PowerPoint/presentation files uploaded by a group
+// ============================================
+model Presentation {
+  id           String   @id @default(cuid())
+  groupId      String
+  uploadedById String
+  title        String
+  fileName     String   // Original filename
+  filePath     String   // Storage path
+  fileSize     Int?     // Size in bytes
+  slideCount   Int?     // Number of slides
+  description  String?
+  createdAt    DateTime @default(now())
+
+  // Relations
+  group      Group @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  uploadedBy User  @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+  @@map("presentations")
 }
 
 // ============================================

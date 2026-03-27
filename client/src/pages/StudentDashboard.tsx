@@ -3,8 +3,9 @@ import { useAuth } from '../context/AuthContext'
 import ModelsTab from '../components/student/ModelsTab'
 import ChatTab from '../components/student/ChatTab'
 import LiteratureTab from '../components/student/LiteratureTab'
+import PresentationsTab from '../components/student/PresentationsTab'
 
-type TabType = 'models' | 'chat' | 'literature'
+type TabType = 'models' | 'chat' | 'literature' | 'presentations'
 
 export default function StudentDashboard() {
   const { user, logout } = useAuth()
@@ -37,6 +38,15 @@ export default function StudentDashboard() {
       icon: (
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+        </svg>
+      )
+    },
+    {
+      id: 'presentations',
+      label: 'Presentations',
+      icon: (
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
         </svg>
       )
     }
@@ -88,6 +98,7 @@ export default function StudentDashboard() {
           {activeTab === 'models' && <ModelsTab />}
           {activeTab === 'chat' && <ChatTab />}
           {activeTab === 'literature' && <LiteratureTab />}
+          {activeTab === 'presentations' && <PresentationsTab />}
         </div>
       </div>
     </div>

@@ -107,6 +107,28 @@ export interface Literature {
   };
 }
 
+export interface Presentation {
+  id: string;
+  groupId: string;
+  uploadedById: string;
+  title: string;
+  fileName: string;
+  filePath: string;
+  fileSize: number | null;
+  slideCount: number | null;
+  description: string | null;
+  createdAt: string;
+  uploadedBy: {
+    id: string;
+    firstName: string;
+    lastName: string;
+  };
+  group: {
+    id: string;
+    name: string;
+  };
+}
+
 // ============================================
 // Groups
 // ============================================
@@ -154,6 +176,19 @@ export function getGroupLiterature(groupId: string): Promise<Literature[]> {
 export function getLiteratureFileUrl(id: string): string {
   const token = localStorage.getItem('token');
   return `${API_BASE}/literature/file/${id}?token=${token}`;
+}
+
+// ============================================
+// Presentations
+// ============================================
+
+export function getAllPresentations(): Promise<Presentation[]> {
+  return request('/presentations/all');
+}
+
+export function getPresentationFileUrl(id: string): string {
+  const token = localStorage.getItem('token');
+  return `${API_BASE}/presentations/file/${id}?token=${token}`;
 }
 
 export interface MemberActivity {

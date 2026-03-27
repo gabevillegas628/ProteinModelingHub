@@ -15,6 +15,7 @@ router.use(requireRole('INSTRUCTOR'));
 const UPLOAD_BASE = path.join(process.cwd(), 'uploads');
 const MODELS_DIR = path.join(UPLOAD_BASE, 'models');
 const LITERATURE_DIR = path.join(UPLOAD_BASE, 'literature');
+const PRESENTATIONS_DIR = path.join(UPLOAD_BASE, 'presentations');
 
 // ============================================
 // GROUPS
@@ -318,6 +319,61 @@ router.get('/literature/file/:id', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Error fetching literature file:', error);
     res.status(500).json({ error: 'Failed to fetch literature file' });
+  }
+});
+
+// ============================================
+// PRESENTATIONS
+// ============================================
+
+// Get all presentations across all groups
+router.get('/presentations/all', async (req: AuthRequest, res: Response) => {
+  try {
+    const presentations = await prisma.presentation.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: {
+        uploadedBy: {
+          select: { id: true, firstName: true, lastName: true }
+        },
+        group: {
+          select: { id: true, name: true }
+        }
+      }
+    });
+
+    res.json(presentations);
+  } catch (error) {
+    console.error('Error fetching presentations:', error);
+    res.status(500).json({ error: 'Failed to fetch presentations' });
+  }
+});
+
+// Get presentation file
+router.get('/presentations/file/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id as string;
+
+    const presentation = await prisma.presentation.findUnique({
+      where: { id }
+    });
+
+    if (!presentation) {
+      res.status(404).json({ error: 'Presentation not found' });
+      return;
+    }
+
+    const filePath = path.join(PRESENTATIONS_DIR, presentation.filePath);
+    if (!fs.existsSync(filePath)) {
+      res.status(404).json({ error: 'File not found' });
+      return;
+    }
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
+    res.setHeader('Content-Disposition', `attachment; filename="${presentation.fileName}"`);
+    res.sendFile(filePath);
+  } catch (error) {
+    console.error('Error fetching presentation file:', error);
+    res.status(500).json({ error: 'Failed to fetch presentation file' });
   }
 });
 

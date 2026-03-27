@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import AdmZip from 'adm-zip';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
 import { sendReviewRequestEmail } from '../services/emailService.js';
@@ -16,9 +17,10 @@ router.use(requireRole('STUDENT'));
 const UPLOAD_BASE = path.join(process.cwd(), 'uploads');
 const MODELS_DIR = path.join(UPLOAD_BASE, 'models');
 const LITERATURE_DIR = path.join(UPLOAD_BASE, 'literature');
+const PRESENTATIONS_DIR = path.join(UPLOAD_BASE, 'presentations');
 
 // Ensure directories exist
-[UPLOAD_BASE, MODELS_DIR, LITERATURE_DIR].forEach(dir => {
+[UPLOAD_BASE, MODELS_DIR, LITERATURE_DIR, PRESENTATIONS_DIR].forEach(dir => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -71,6 +73,18 @@ const literatureUpload = multer({
   },
   limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
 });
+
+// Count slides in a PPTX file (PPTX is a ZIP; slides are ppt/slides/slide*.xml)
+function countSlides(filePath: string): number | null {
+  try {
+    const zip = new AdmZip(filePath);
+    return zip.getEntries().filter(e =>
+      /^ppt\/slides\/slide\d+\.xml$/.test(e.entryName)
+    ).length || null;
+  } catch {
+    return null;
+  }
+}
 
 // Helper to get student's group
 async function getStudentGroup(userId: string) {
@@ -623,6 +637,179 @@ router.delete('/literature/:id', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Error deleting literature:', error);
     res.status(500).json({ error: 'Failed to delete literature' });
+  }
+});
+
+// ============================================
+// Presentations
+// ============================================
+
+const presentationStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, PRESENTATIONS_DIR);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const presentationUpload = multer({
+  storage: presentationStorage,
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext === '.ppt' || ext === '.pptx') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PPT and PPTX files are allowed for presentations'));
+    }
+  },
+  limits: { fileSize: 100 * 1024 * 1024 } // 100MB limit
+});
+
+// Get all presentations for group
+router.get('/presentations', async (req: AuthRequest, res: Response) => {
+  try {
+    const group = await getStudentGroup(req.user!.userId);
+    if (!group) {
+      res.status(404).json({ error: 'You are not assigned to a group' });
+      return;
+    }
+
+    const presentations = await prisma.presentation.findMany({
+      where: { groupId: group.id },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        uploadedBy: {
+          select: { id: true, firstName: true, lastName: true }
+        }
+      }
+    });
+
+    res.json(presentations);
+  } catch (error) {
+    console.error('Error fetching presentations:', error);
+    res.status(500).json({ error: 'Failed to fetch presentations' });
+  }
+});
+
+// Upload presentation
+router.post('/presentations', presentationUpload.single('file'), async (req: AuthRequest, res: Response) => {
+  try {
+    const file = req.file;
+    const { title, description } = req.body;
+
+    if (!file) {
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+
+    if (!title) {
+      fs.unlinkSync(file.path);
+      res.status(400).json({ error: 'Title is required' });
+      return;
+    }
+
+    const group = await getStudentGroup(req.user!.userId);
+    if (!group) {
+      fs.unlinkSync(file.path);
+      res.status(404).json({ error: 'You are not assigned to a group' });
+      return;
+    }
+
+    const slideCount = countSlides(file.path);
+
+    const presentation = await prisma.presentation.create({
+      data: {
+        groupId: group.id,
+        uploadedById: req.user!.userId,
+        title,
+        description,
+        fileName: file.originalname,
+        filePath: file.filename,
+        fileSize: file.size,
+        slideCount
+      },
+      include: {
+        uploadedBy: {
+          select: { id: true, firstName: true, lastName: true }
+        }
+      }
+    });
+
+    res.status(201).json(presentation);
+  } catch (error) {
+    console.error('Error uploading presentation:', error);
+    res.status(500).json({ error: 'Failed to upload presentation' });
+  }
+});
+
+// Download presentation file
+router.get('/presentations/file/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id as string;
+
+    const group = await getStudentGroup(req.user!.userId);
+    if (!group) {
+      res.status(404).json({ error: 'You are not assigned to a group' });
+      return;
+    }
+
+    const presentation = await prisma.presentation.findUnique({
+      where: { id }
+    });
+
+    if (!presentation || presentation.groupId !== group.id) {
+      res.status(404).json({ error: 'Presentation not found' });
+      return;
+    }
+
+    const filePath = path.join(PRESENTATIONS_DIR, presentation.filePath);
+    if (!fs.existsSync(filePath)) {
+      res.status(404).json({ error: 'File not found' });
+      return;
+    }
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
+    res.setHeader('Content-Disposition', `attachment; filename="${presentation.fileName}"`);
+    res.sendFile(filePath);
+  } catch (error) {
+    console.error('Error fetching presentation file:', error);
+    res.status(500).json({ error: 'Failed to fetch presentation file' });
+  }
+});
+
+// Delete presentation
+router.delete('/presentations/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id as string;
+
+    const group = await getStudentGroup(req.user!.userId);
+    if (!group) {
+      res.status(404).json({ error: 'You are not assigned to a group' });
+      return;
+    }
+
+    const presentation = await prisma.presentation.findUnique({
+      where: { id }
+    });
+
+    if (!presentation || presentation.groupId !== group.id) {
+      res.status(404).json({ error: 'Presentation not found' });
+      return;
+    }
+
+    const filePath = path.join(PRESENTATIONS_DIR, presentation.filePath);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    await prisma.presentation.delete({ where: { id } });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting presentation:', error);
+    res.status(500).json({ error: 'Failed to delete presentation' });
   }
 });
 

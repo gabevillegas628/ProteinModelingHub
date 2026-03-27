@@ -175,6 +175,55 @@ export function deleteLiterature(id: string): Promise<{ success: boolean }> {
 }
 
 // ============================================
+// Presentations
+// ============================================
+
+export interface Presentation {
+  id: string;
+  groupId: string;
+  uploadedById: string;
+  title: string;
+  fileName: string;
+  filePath: string;
+  fileSize: number | null;
+  slideCount: number | null;
+  description: string | null;
+  createdAt: string;
+  uploadedBy: {
+    id: string;
+    firstName: string;
+    lastName: string;
+  };
+}
+
+export function getPresentations(): Promise<Presentation[]> {
+  return request('/presentations');
+}
+
+export async function uploadPresentation(file: File, title: string, description?: string): Promise<Presentation> {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('title', title);
+  if (description) {
+    formData.append('description', description);
+  }
+
+  return request('/presentations', {
+    method: 'POST',
+    body: formData
+  });
+}
+
+export function getPresentationFileUrl(id: string): string {
+  const token = localStorage.getItem('token');
+  return `${API_BASE}/presentations/file/${id}?token=${token}`;
+}
+
+export function deletePresentation(id: string): Promise<{ success: boolean }> {
+  return request(`/presentations/${id}`, { method: 'DELETE' });
+}
+
+// ============================================
 // Review Request
 // ============================================
 
