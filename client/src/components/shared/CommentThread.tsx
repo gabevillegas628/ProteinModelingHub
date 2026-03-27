@@ -196,7 +196,7 @@ export default function CommentThread({
   }
 
   return (
-    <div ref={containerRef} className="flex flex-col h-full overflow-hidden">
+    <div ref={containerRef} className="flex flex-col h-full">
       {/* Error display */}
       {error && (
         <div className="bg-red-50 text-red-600 px-3 py-2 text-sm rounded-md mb-2 flex items-center justify-between shrink-0">
@@ -260,7 +260,7 @@ export default function CommentThread({
           onChange={(e) => setNewMessage(e.target.value)}
           placeholder={placeholder}
           disabled={posting}
-          className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+          className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
         />
         <button
           type="submit"
