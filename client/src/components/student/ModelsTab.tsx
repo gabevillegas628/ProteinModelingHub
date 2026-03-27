@@ -598,7 +598,7 @@ export default function ModelsTab() {
                     </div>
 
                     {comments[model.submission.id]?.expanded && (
-                      <div className="mt-3 bg-gray-50 rounded-lg p-4 overflow-hidden" style={{ height: '400px' }}>
+                      <div className="mt-3 bg-gray-50 rounded-lg p-4" style={{ height: '400px' }}>
                         <CommentThread
                           messages={comments[model.submission.id]?.messages || []}
                           loading={comments[model.submission.id]?.loading || false}

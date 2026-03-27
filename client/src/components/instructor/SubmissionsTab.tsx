@@ -359,7 +359,7 @@ export default function SubmissionsTab({ groupId, proteinPdbId }: Props) {
                         </svg>
                       </button>
                     </div>
-                    <div className="flex-1 overflow-hidden p-3" style={{ minHeight: '0' }}>
+                    <div className="flex-1 min-h-0 p-3">
                       <CommentThread
                         messages={comments[model.submission.id]?.messages || []}
                         loading={comments[model.submission.id]?.loading || false}
