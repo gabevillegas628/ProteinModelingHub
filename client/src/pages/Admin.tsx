@@ -5,8 +5,9 @@ import GroupsTab from '../components/admin/GroupsTab'
 import UsersTab from '../components/admin/UsersTab'
 import DangerZoneTab from '../components/admin/DangerZoneTab'
 import ApplicationsTab from '../components/admin/ApplicationsTab'
+import ActivityTab from '../components/admin/ActivityTab'
 
-type TabId = 'applications' | 'models' | 'groups' | 'users' | 'danger'
+type TabId = 'applications' | 'models' | 'groups' | 'users' | 'activity' | 'danger'
 
 interface Tab {
   id: TabId
@@ -19,6 +20,7 @@ const tabs: Tab[] = [
   { id: 'models', label: 'Model Templates' },
   { id: 'groups', label: 'Groups' },
   { id: 'users', label: 'Users' },
+  { id: 'activity', label: 'Activity' },
   { id: 'danger', label: 'Danger Zone', danger: true },
 ]
 
@@ -91,6 +93,7 @@ export default function Admin() {
         {activeTab === 'models' && <ModelTemplatesTab />}
         {activeTab === 'groups' && <GroupsTab />}
         {activeTab === 'users' && <UsersTab />}
+        {activeTab === 'activity' && <ActivityTab />}
         {activeTab === 'danger' && <DangerZoneTab />}
       </main>
     </div>

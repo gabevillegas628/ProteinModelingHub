@@ -478,4 +478,111 @@ router.get('/groups/:groupId/activity', async (req: AuthRequest, res: Response) 
   }
 });
 
+// ============================================
+// MESSAGE INBOX (all threads across all groups)
+// ============================================
+
+router.get('/messages/threads', async (req: AuthRequest, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+
+    const [groups, readStatuses, allSubmissions] = await Promise.all([
+      prisma.group.findMany({
+        select: { id: true, name: true, proteinPdbId: true, proteinName: true },
+        orderBy: { name: 'asc' },
+      }),
+      prisma.messageReadStatus.findMany({ where: { userId } }),
+      prisma.submission.findMany({
+        select: {
+          id: true,
+          groupId: true,
+          modelTemplate: { select: { name: true } },
+        },
+      }),
+    ]);
+
+    const submissionsByGroup = new Map<string, typeof allSubmissions>();
+    for (const sub of allSubmissions) {
+      if (!submissionsByGroup.has(sub.groupId)) submissionsByGroup.set(sub.groupId, []);
+      submissionsByGroup.get(sub.groupId)!.push(sub);
+    }
+
+    const threads: {
+      groupId: string; groupName: string; proteinPdbId: string;
+      submissionId: string | null; label: string;
+      latestMessage: { content: string; createdAt: Date; user: { firstName: string; lastName: string } };
+      unreadCount: number;
+    }[] = [];
+
+    await Promise.all(groups.map(async (group) => {
+      const groupThreads = threads; // push directly, array is shared
+
+      // General thread
+      const generalReadStatus = readStatuses.find(
+        rs => rs.groupId === group.id && rs.submissionId === null
+      );
+      const [latestGeneral, generalUnread] = await Promise.all([
+        prisma.message.findFirst({
+          where: { groupId: group.id, submissionId: null },
+          orderBy: { createdAt: 'desc' },
+          select: { content: true, createdAt: true, user: { select: { firstName: true, lastName: true } } },
+        }),
+        prisma.message.count({
+          where: {
+            groupId: group.id,
+            submissionId: null,
+            ...(generalReadStatus ? { createdAt: { gt: generalReadStatus.lastReadAt } } : {}),
+          },
+        }),
+      ]);
+
+      if (latestGeneral) {
+        groupThreads.push({
+          groupId: group.id, groupName: group.name, proteinPdbId: group.proteinPdbId,
+          submissionId: null, label: 'General',
+          latestMessage: latestGeneral,
+          unreadCount: generalUnread,
+        });
+      }
+
+      // Submission threads
+      const groupSubs = submissionsByGroup.get(group.id) ?? [];
+      await Promise.all(groupSubs.map(async (sub) => {
+        const subReadStatus = readStatuses.find(rs => rs.submissionId === sub.id);
+        const [latestSub, subUnread] = await Promise.all([
+          prisma.message.findFirst({
+            where: { submissionId: sub.id },
+            orderBy: { createdAt: 'desc' },
+            select: { content: true, createdAt: true, user: { select: { firstName: true, lastName: true } } },
+          }),
+          prisma.message.count({
+            where: {
+              submissionId: sub.id,
+              ...(subReadStatus ? { createdAt: { gt: subReadStatus.lastReadAt } } : {}),
+            },
+          }),
+        ]);
+
+        if (latestSub) {
+          groupThreads.push({
+            groupId: group.id, groupName: group.name, proteinPdbId: group.proteinPdbId,
+            submissionId: sub.id, label: sub.modelTemplate.name,
+            latestMessage: latestSub,
+            unreadCount: subUnread,
+          });
+        }
+      }));
+    }));
+
+    threads.sort((a, b) =>
+      new Date(b.latestMessage.createdAt).getTime() - new Date(a.latestMessage.createdAt).getTime()
+    );
+
+    res.json(threads);
+  } catch (error) {
+    console.error('Error fetching message threads:', error);
+    res.status(500).json({ error: 'Failed to fetch message threads' });
+  }
+});
+
 export default router;

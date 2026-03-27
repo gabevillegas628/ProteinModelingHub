@@ -6,10 +6,11 @@ import InstructorLiteratureTab from '../components/instructor/LiteratureTab'
 import InstructorDiscussionTab from '../components/instructor/DiscussionTab'
 import InstructorSummaryTab from '../components/instructor/SummaryTab'
 import InstructorPresentationsTab from '../components/instructor/PresentationsTab'
+import MessagesInbox from '../components/instructor/MessagesInbox'
 import JSmolViewer from '../components/shared/JSmolViewer'
 
 type TabType = 'submissions' | 'literature' | 'discussion'
-type SidebarView = 'overview' | 'presentations'
+type SidebarView = 'overview' | 'presentations' | 'messages'
 
 export default function Dashboard() {
   const { user, logout } = useAuth()
@@ -20,6 +21,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [blankViewerOpen, setBlankViewerOpen] = useState(false)
+  const [inboxUnreadCount, setInboxUnreadCount] = useState(0)
 
   useEffect(() => {
     loadGroups()
@@ -72,7 +74,7 @@ export default function Dashboard() {
   ]
 
   return (
-    <div className="min-h-screen bg-gray-100 flex flex-col">
+    <div className="h-screen bg-gray-100 flex flex-col">
       {/* Header */}
       <header className="bg-white shadow shrink-0">
         <div className="max-w-full mx-auto px-4 py-4 flex justify-between items-center">
@@ -145,6 +147,26 @@ export default function Dashboard() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
                 </svg>
                 Presentations
+              </button>
+              <button
+                onClick={() => { setSelectedGroupId(null); setSidebarView('messages') }}
+                className={`w-full text-left px-4 py-3 border-b border-gray-100 text-sm font-medium transition-colors flex items-center justify-between gap-2 ${
+                  sidebarView === 'messages' && selectedGroupId === null
+                    ? 'bg-blue-50 border-l-4 border-l-blue-600 text-blue-700'
+                    : 'text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                  </svg>
+                  Messages
+                </span>
+                {inboxUnreadCount > 0 && (
+                  <span className="bg-blue-600 text-white text-xs font-medium px-2 py-0.5 rounded-full min-w-5 text-center">
+                    {inboxUnreadCount}
+                  </span>
+                )}
               </button>
               {groups.map((group) => (
                 <button
@@ -232,6 +254,10 @@ export default function Dashboard() {
                 )}
               </div>
             </>
+          ) : sidebarView === 'messages' ? (
+            <div className="flex-1 overflow-y-auto">
+              <MessagesInbox onUnreadCountChange={setInboxUnreadCount} />
+            </div>
           ) : sidebarView === 'presentations' ? (
             <div className="flex-1 overflow-y-auto">
               <InstructorPresentationsTab />

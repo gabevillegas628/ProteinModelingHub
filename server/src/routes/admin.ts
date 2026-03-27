@@ -1069,4 +1069,61 @@ router.post('/applications/:id/reject', async (req: Request, res: Response) => {
   }
 });
 
+// ============================================
+// ACTIVITY LOGS
+// ============================================
+
+// Get paginated login events
+router.get('/login-events', async (req: Request, res: Response) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
+    const skip = (page - 1) * limit;
+
+    const [total, events] = await Promise.all([
+      prisma.loginEvent.count(),
+      prisma.loginEvent.findMany({
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          user: { select: { id: true, email: true, firstName: true, lastName: true, role: true } },
+        },
+      }),
+    ]);
+
+    res.json({ data: events, total, page, limit, totalPages: Math.ceil(total / limit) });
+  } catch (error) {
+    console.error('Error fetching login events:', error);
+    res.status(500).json({ error: 'Failed to fetch login events' });
+  }
+});
+
+// Get paginated viewer sessions
+router.get('/viewer-sessions', async (req: Request, res: Response) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
+    const skip = (page - 1) * limit;
+
+    const [total, sessions] = await Promise.all([
+      prisma.viewerSession.count(),
+      prisma.viewerSession.findMany({
+        skip,
+        take: limit,
+        orderBy: { startedAt: 'desc' },
+        include: {
+          user: { select: { id: true, email: true, firstName: true, lastName: true } },
+          group: { select: { id: true, name: true } },
+        },
+      }),
+    ]);
+
+    res.json({ data: sessions, total, page, limit, totalPages: Math.ceil(total / limit) });
+  } catch (error) {
+    console.error('Error fetching viewer sessions:', error);
+    res.status(500).json({ error: 'Failed to fetch viewer sessions' });
+  }
+});
+
 export default router;

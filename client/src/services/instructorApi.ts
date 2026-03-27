@@ -133,8 +133,26 @@ export interface Presentation {
 // Groups
 // ============================================
 
+export interface MessageThread {
+  groupId: string;
+  groupName: string;
+  proteinPdbId: string;
+  submissionId: string | null;
+  label: string;
+  latestMessage: {
+    content: string;
+    createdAt: string;
+    user: { firstName: string; lastName: string };
+  };
+  unreadCount: number;
+}
+
 export function getGroups(): Promise<Group[]> {
   return request('/groups');
+}
+
+export function getMessageThreads(): Promise<MessageThread[]> {
+  return request('/messages/threads');
 }
 
 export function getGroup(groupId: string): Promise<GroupDetails> {

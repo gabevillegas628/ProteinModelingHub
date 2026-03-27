@@ -19,9 +19,9 @@ export default function ChatTab() {
 
   useEffect(() => {
     if (group) {
-      loadMessages()
-      // Poll for new messages every 10 seconds
-      const interval = setInterval(loadMessages, 10000)
+      loadMessages(true)
+      // Poll for new messages every 10 seconds (background, no spinner)
+      const interval = setInterval(() => loadMessages(false), 10000)
       return () => clearInterval(interval)
     }
   }, [group?.id])
@@ -38,10 +38,10 @@ export default function ChatTab() {
     }
   }
 
-  const loadMessages = useCallback(async () => {
+  const loadMessages = useCallback(async (showSpinner = false) => {
     if (!group) return
     try {
-      setMessagesLoading(messages.length === 0)
+      if (showSpinner) setMessagesLoading(true)
       const response = await messageApi.getGroupMessages(group.id)
       setMessages(response.messages)
       setReadStatuses(response.readStatuses)
@@ -50,7 +50,7 @@ export default function ChatTab() {
     } finally {
       setMessagesLoading(false)
     }
-  }, [group?.id, messages.length])
+  }, [group?.id])
 
   const handlePost = async (content: string) => {
     if (!group) return

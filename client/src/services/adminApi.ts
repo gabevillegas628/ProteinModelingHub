@@ -288,6 +288,40 @@ export function getApplicationFileUrl(id: string): string {
   return `/modeling/api/admin/applications/${id}/file?token=${token}`;
 }
 
+// ============================================
+// Activity Logs
+// ============================================
+
+export interface LoginEvent {
+  id: string;
+  createdAt: string;
+  user: { id: string; email: string; firstName: string; lastName: string; role: string };
+}
+
+export interface ViewerSession {
+  id: string;
+  startedAt: string;
+  endedAt: string | null;
+  user: { id: string; email: string; firstName: string; lastName: string };
+  group: { id: string; name: string };
+}
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+}
+
+export function getLoginEvents(page = 1, limit = 20): Promise<PaginatedResponse<LoginEvent>> {
+  return request(`/login-events?page=${page}&limit=${limit}`);
+}
+
+export function getViewerSessions(page = 1, limit = 20): Promise<PaginatedResponse<ViewerSession>> {
+  return request(`/viewer-sessions?page=${page}&limit=${limit}`);
+}
+
 export async function downloadArchive(): Promise<void> {
   const token = localStorage.getItem('token');
   const response = await fetch(`${API_BASE}/nuclear-reset/archive`, {
