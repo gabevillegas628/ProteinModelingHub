@@ -51,6 +51,15 @@ export default function ModelsTab() {
       setLoading(true)
       const response = await studentApi.getModels()
       setData(response)
+      // Kick off comment loading for all submissions immediately
+      const submissionIds = response.models.flatMap(m => m.submission ? [m.submission.id] : [])
+      submissionIds.forEach(id => {
+        setComments(prev => ({
+          ...prev,
+          [id]: { messages: [], loading: true, error: '', expanded: true, unreadCount: 0, readStatuses: [] }
+        }))
+      })
+      await Promise.all(submissionIds.map(id => loadComments(id)))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load models')
     } finally {
@@ -162,32 +171,6 @@ export default function ModelsTab() {
     await handleFileSelect(templateId, file)
     // Close the viewer after successful submission
     closeViewer()
-  }
-
-  const toggleComments = async (submissionId: string) => {
-    const current = comments[submissionId]
-
-    if (current?.expanded) {
-      // Collapse
-      setComments(prev => ({
-        ...prev,
-        [submissionId]: { ...prev[submissionId], expanded: false }
-      }))
-    } else {
-      // Expand and load comments
-      setComments(prev => ({
-        ...prev,
-        [submissionId]: {
-          messages: prev[submissionId]?.messages || [],
-          loading: true,
-          error: '',
-          expanded: true,
-          unreadCount: prev[submissionId]?.unreadCount || 0,
-          readStatuses: prev[submissionId]?.readStatuses || []
-        }
-      }))
-      await loadComments(submissionId)
-    }
   }
 
   const loadComments = async (submissionId: string) => {
@@ -384,237 +367,196 @@ export default function ModelsTab() {
       ) : (
         <div className="grid gap-4">
           {visibleModels.map((model) => (
-            <div key={model.id} className="bg-white rounded-lg shadow p-6">
-              <div className="flex justify-between items-start">
-                <div className="flex-1">
-                  <div className="flex items-center gap-3 mb-2">
-                    <h3 className="text-lg font-semibold text-gray-800">{model.name}</h3>
-                    {model.submission && getStatusBadge(model.submission.status)}
+            <div key={model.id} className={`bg-white rounded-lg shadow p-4 flex flex-col max-h-120 ${model.submission ? '' : ''}`}>
+
+              {/* Hidden file input */}
+              <input
+                type="file"
+                accept=".jpg,.jpeg,.png"
+                ref={(el) => { fileInputRefs.current[model.id] = el }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0]
+                  if (file) { handleFileSelect(model.id, file); e.target.value = '' }
+                }}
+                className="hidden"
+              />
+
+              {/* Header */}
+              <div className="flex justify-between items-start mb-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-semibold text-gray-800">{model.name}</h3>
+                    {model.submission ? getStatusBadge(model.submission.status) : (
+                      <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-400">No submission</span>
+                    )}
                   </div>
                   {model.description && (
-                    <p className="text-sm text-gray-600 mb-3">{model.description}</p>
-                  )}
-
-                  {model.submission ? (
-                    <>
-                      <div className="bg-gray-50 rounded-md p-3 text-sm">
-                        <div className="flex items-center gap-4 text-gray-600">
-                          <span className="font-medium">{model.submission.fileName}</span>
-                          <span>{formatFileSize(model.submission.fileSize)}</span>
-                          <span>Uploaded {formatDate(model.submission.createdAt)}</span>
-                        </div>
-                      </div>
-                      {model.submission.status === 'NEEDS_REVISION' && model.submission.feedback && (
-                        <div className="mt-2 bg-amber-50 border border-amber-200 rounded-md p-3 text-sm">
-                          <p className="font-medium text-amber-800 mb-1">Instructor feedback:</p>
-                          <p className="text-amber-700">{model.submission.feedback}</p>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <p className="text-sm text-gray-400 italic">No submission yet</p>
+                    <p className="text-xs text-gray-500 mt-0.5">{model.description}</p>
                   )}
                 </div>
-
-                <div className="ml-4 flex flex-col gap-2 items-end">
-                  {/* Upload/Replace — hidden when locked */}
+                <div className="flex items-center gap-2 ml-4">
                   {(!model.submission || model.submission.status === 'DRAFT' || model.submission.status === 'NEEDS_REVISION') && (
                     <>
-                      <input
-                        type="file"
-                        accept=".jpg,.jpeg,.png"
-                        ref={(el) => { fileInputRefs.current[model.id] = el }}
-                        onChange={(e) => {
-                          const file = e.target.files?.[0]
-                          if (file) {
-                            handleFileSelect(model.id, file)
-                            e.target.value = ''
-                          }
-                        }}
-                        className="hidden"
-                      />
                       <button
                         onClick={() => handleUploadClick(model.id)}
                         disabled={uploading === model.id}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400 transition-colors text-sm"
+                        className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
                       >
-                        {uploading === model.id ? 'Uploading...' : model.submission ? 'Replace' : 'Upload'}
+                        {uploading === model.id ? 'Uploading...' : model.submission ? 'Upload PNGJ' : 'Upload'}
                       </button>
                       <button
                         onClick={() => setNewPickerOpen(newPickerOpen === model.id ? null : model.id)}
-                        className={`flex items-center gap-1.5 px-4 py-2 rounded-md transition-colors text-sm font-medium ${
+                        className={`flex items-center gap-1 px-3 py-1.5 text-sm rounded-md transition-colors font-medium ${
                           newPickerOpen === model.id ? 'bg-indigo-700 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-700'
                         }`}
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                        </svg>
-                        New
+                        {!newPickerOpen || newPickerOpen !== model.id ? (
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                        ) : null}
+                        {newPickerOpen === model.id ? 'Cancel' : 'New'}
                       </button>
                     </>
                   )}
-
-                  {/* Submit for Review — shown when DRAFT and has a file */}
                   {model.submission?.status === 'DRAFT' && (
                     <button
                       onClick={() => handleSubmitForReview(model.id)}
                       disabled={submitting === model.id}
-                      className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:bg-gray-400 transition-colors text-sm font-medium"
+                      className="px-3 py-1.5 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 disabled:bg-gray-400 transition-colors"
                     >
                       {submitting === model.id ? 'Submitting...' : 'Submit for Review'}
                     </button>
                   )}
-
-                  {/* Resubmit — shown when NEEDS_REVISION */}
                   {model.submission?.status === 'NEEDS_REVISION' && (
                     <button
                       onClick={() => handleSubmitForReview(model.id)}
                       disabled={submitting === model.id}
-                      className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:bg-gray-400 transition-colors text-sm font-medium"
+                      className="px-3 py-1.5 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 disabled:bg-gray-400 transition-colors"
                     >
                       {submitting === model.id ? 'Submitting...' : 'Resubmit for Review'}
                     </button>
                   )}
-
-                  {/* Withdraw — shown when SUBMITTED */}
                   {model.submission?.status === 'SUBMITTED' && (
                     <button
                       onClick={() => handleWithdraw(model.submission!.id)}
                       disabled={withdrawing === model.submission.id}
-                      className="text-sm text-gray-500 hover:text-red-600 underline disabled:opacity-50 transition-colors"
+                      className="text-sm text-gray-400 hover:text-red-600 underline disabled:opacity-50 transition-colors"
                     >
-                      {withdrawing === model.submission.id ? 'Withdrawing...' : 'Withdraw Submission'}
+                      {withdrawing === model.submission.id ? 'Withdrawing...' : 'Withdraw'}
                     </button>
                   )}
                 </div>
               </div>
 
-              {/* Inline picker: choose starting point for a new model */}
+              {/* NEEDS_REVISION feedback banner */}
+              {model.submission?.status === 'NEEDS_REVISION' && model.submission.feedback && (
+                <div className="mb-3 bg-amber-50 border border-amber-200 rounded-md px-3 py-2 text-sm">
+                  <span className="font-medium text-amber-800">Feedback: </span>
+                  <span className="text-amber-700">{model.submission.feedback}</span>
+                </div>
+              )}
+
+              {/* New model picker */}
               {(!model.submission || model.submission.status === 'DRAFT' || model.submission.status === 'NEEDS_REVISION') && newPickerOpen === model.id && (
-                <div className="mt-4 pt-4 border-t border-gray-100">
-                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Start from</p>
+                <div className="mb-3 pt-3 border-t border-gray-100">
+                  <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Start from</p>
                   <div className="flex gap-3 flex-wrap">
-                    {/* PDB option */}
                     <button
                       onClick={() => openNewViewer(model.id, model.name)}
-                      className="flex flex-col items-center gap-1.5 p-3 w-32 border-2 border-indigo-200 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 bg-white transition-colors text-left"
+                      className="flex flex-col items-center gap-1.5 p-3 w-28 border-2 border-indigo-200 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 bg-white transition-colors"
                     >
-                      <div className="w-24 h-16 flex items-center justify-center bg-indigo-50 rounded">
-                        <svg className="w-10 h-10 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <div className="w-20 h-12 flex items-center justify-center bg-indigo-50 rounded">
+                        <svg className="w-8 h-8 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" />
                         </svg>
                       </div>
                       <span className="text-xs font-semibold text-indigo-700">PDB Structure</span>
                       <span className="text-xs text-gray-400">{data.group.proteinPdbId}</span>
                     </button>
-
-                    {/* Existing submitted models */}
-                    {data.models
-                      .filter(m => m.submission && m.id !== model.id)
-                      .map(sourceModel => (
-                        <button
-                          key={sourceModel.id}
-                          onClick={() => openNewViewer(model.id, model.name, studentApi.getModelFileUrl(sourceModel.submission!.id))}
-                          className="flex flex-col items-center gap-1.5 p-3 w-32 border-2 border-gray-200 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 bg-white transition-colors text-left"
-                        >
-                          <img
-                            src={`${studentApi.getModelFileUrl(sourceModel.submission!.id)}&t=${new Date(sourceModel.submission!.updatedAt).getTime()}`}
-                            alt={sourceModel.name}
-                            className="w-24 h-16 object-cover rounded"
-                          />
-                          <span className="text-xs font-semibold text-gray-700 text-center leading-tight">{sourceModel.name}</span>
-                        </button>
-                      ))
-                    }
+                    {data.models.filter(m => m.submission && m.id !== model.id).map(sourceModel => (
+                      <button
+                        key={sourceModel.id}
+                        onClick={() => openNewViewer(model.id, model.name, studentApi.getModelFileUrl(sourceModel.submission!.id))}
+                        className="flex flex-col items-center gap-1.5 p-3 w-28 border-2 border-gray-200 rounded-lg hover:border-indigo-500 hover:bg-indigo-50 bg-white transition-colors"
+                      >
+                        <img
+                          src={`${studentApi.getModelFileUrl(sourceModel.submission!.id)}&t=${new Date(sourceModel.submission!.updatedAt).getTime()}`}
+                          alt={sourceModel.name}
+                          className="w-20 h-12 object-cover rounded"
+                        />
+                        <span className="text-xs font-semibold text-gray-700 text-center leading-tight">{sourceModel.name}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}
 
+              {/* Two-column body — only when submission exists */}
               {model.submission && (
-                <>
-                  <div className="mt-4 pt-4 border-t border-gray-100">
-                    <div className="flex gap-4 items-start">
-                      <img
-                        src={`${studentApi.getModelFileUrl(model.submission.id)}&t=${new Date(model.submission.updatedAt).getTime()}`}
-                        alt={model.name}
-                        className="max-w-sm h-auto rounded-md border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity"
-                        style={{ maxHeight: '250px' }}
-                        onClick={() => openViewer(model.submission!.id, model.name, model.id)}
-                      />
-                      <div className="flex flex-col gap-2">
-                        <button
-                          onClick={() => openViewer(model.submission!.id, model.name, model.id)}
-                          className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 transition-colors text-sm"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" />
-                          </svg>
-                          View in 3D
-                        </button>
-                        <p className="text-xs text-gray-500">
-                          Click image or button to open interactive 3D viewer
-                        </p>
-                      </div>
-                    </div>
+                <div className="flex gap-4 flex-1 min-h-0">
+                  {/* Left: thumbnail + viewer button + meta */}
+                  <div className="w-40 shrink-0 flex flex-col gap-2">
+                    <img
+                      src={`${studentApi.getModelFileUrl(model.submission.id)}&t=${new Date(model.submission.updatedAt).getTime()}`}
+                      alt={model.name}
+                      className="w-full h-auto rounded-md border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity object-cover"
+                      style={{ maxHeight: '160px' }}
+                      onClick={() => openViewer(model.submission!.id, model.name, model.id)}
+                    />
+                    <button
+                      onClick={() => openViewer(model.submission!.id, model.name, model.id)}
+                      className="flex items-center justify-center gap-1.5 bg-purple-600 text-white px-3 py-1.5 rounded-md hover:bg-purple-700 transition-colors text-sm"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" />
+                      </svg>
+                      View in 3D
+                    </button>
+                    <p className="text-xs text-gray-400 text-center leading-snug">
+                      {model.submission.fileName}<br />
+                      {formatFileSize(model.submission.fileSize)} · {formatDate(model.submission.createdAt)}
+                    </p>
                   </div>
 
-                  {/* Comments Section */}
-                  <div className="mt-4 pt-4 border-t border-gray-100">
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => toggleComments(model.submission!.id)}
-                        className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-blue-600"
-                      >
-                        <svg
-                          className={`w-4 h-4 transition-transform ${comments[model.submission.id]?.expanded ? 'rotate-90' : ''}`}
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  {/* Right: comment thread */}
+                  <div className="flex-1 flex flex-col min-w-0 border border-gray-100 rounded-lg overflow-hidden">
+                    <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 bg-gray-50">
+                      <span className="text-xs font-medium text-gray-500 flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
                         </svg>
                         Comments
-                        {comments[model.submission.id]?.messages?.length > 0 && (
-                          <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">
-                            {comments[model.submission.id].messages.length}
-                          </span>
-                        )}
-                        {(comments[model.submission.id]?.unreadCount ?? model.submission?.unreadCount ?? 0) > 0 && (
+                        {(comments[model.submission.id]?.unreadCount ?? model.submission.unreadCount ?? 0) > 0 && (
                           <span className="w-2 h-2 bg-red-500 rounded-full" title="Unread comments" />
                         )}
-                      </button>
+                      </span>
                       <button
                         onClick={() => openDiscussionModal(model.submission!.id, model.name)}
                         className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
                         title="Open in full view"
                       >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
                         </svg>
                       </button>
                     </div>
-
-                    {comments[model.submission.id]?.expanded && (
-                      <div className="mt-3 bg-gray-50 rounded-lg p-4" style={{ height: '400px' }}>
-                        <CommentThread
-                          messages={comments[model.submission.id]?.messages || []}
-                          loading={comments[model.submission.id]?.loading || false}
-                          error={comments[model.submission.id]?.error || ''}
-                          onPost={(content) => postComment(model.submission!.id, content)}
-                          onRefresh={() => loadComments(model.submission!.id)}
-                          placeholder="Write a comment..."
-                          emptyMessage="No comments yet. Start the conversation!"
-                          currentUserId={user?.id}
-                          onMarkRead={(lastReadAt) => markCommentsRead(model.submission!.id, lastReadAt)}
-                          readStatuses={comments[model.submission.id]?.readStatuses || []}
-                        />
-                      </div>
-                    )}
+                    <div className="flex-1 min-h-0 p-3">
+                      <CommentThread
+                        messages={comments[model.submission.id]?.messages || []}
+                        loading={comments[model.submission.id]?.loading || false}
+                        error={comments[model.submission.id]?.error || ''}
+                        onPost={(content) => postComment(model.submission!.id, content)}
+                        onRefresh={() => loadComments(model.submission!.id)}
+                        placeholder="Write a comment..."
+                        emptyMessage="No comments yet."
+                        currentUserId={user?.id}
+                        onMarkRead={(lastReadAt) => markCommentsRead(model.submission!.id, lastReadAt)}
+                        readStatuses={comments[model.submission.id]?.readStatuses || []}
+                      />
+                    </div>
                   </div>
-                </>
+                </div>
               )}
             </div>
           ))}
