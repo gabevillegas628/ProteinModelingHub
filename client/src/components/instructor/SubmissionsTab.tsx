@@ -38,6 +38,8 @@ export default function SubmissionsTab({ groupId, proteinPdbId }: Props) {
   const [viewer, setViewer] = useState<ViewerState>({ isOpen: false, fileUrl: '', modelName: '' })
   const [comments, setComments] = useState<CommentsState>({})
   const [discussionModal, setDiscussionModal] = useState<{ submissionId: string; modelName: string } | null>(null)
+  const [showRevisionBox, setShowRevisionBox] = useState<Record<string, boolean>>({})
+  const [revisionFeedback, setRevisionFeedback] = useState<Record<string, string>>({})
 
   useEffect(() => {
     loadSubmissions()
@@ -49,6 +51,15 @@ export default function SubmissionsTab({ groupId, proteinPdbId }: Props) {
       setError('')
       const data = await instructorApi.getGroupSubmissions(groupId)
       setModels(data)
+      // Kick off comment loading for all submissions immediately
+      const submissionIds = data.flatMap(m => m.submission ? [m.submission.id] : [])
+      submissionIds.forEach(id => {
+        setComments(prev => ({
+          ...prev,
+          [id]: { messages: [], loading: true, error: '', expanded: true, unreadCount: 0, readStatuses: [] }
+        }))
+      })
+      await Promise.all(submissionIds.map(id => loadComments(id)))
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load submissions')
     } finally {
@@ -79,29 +90,26 @@ export default function SubmissionsTab({ groupId, proteinPdbId }: Props) {
     }
   }
 
-  const toggleComments = async (submissionId: string) => {
-    const current = comments[submissionId]
+  const handleApprove = async (submissionId: string) => {
+    try {
+      await instructorApi.updateSubmission(submissionId, { status: 'APPROVED' })
+      await loadSubmissions()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to approve submission')
+    }
+  }
 
-    if (current?.expanded) {
-      // Collapse
-      setComments(prev => ({
-        ...prev,
-        [submissionId]: { ...prev[submissionId], expanded: false }
-      }))
-    } else {
-      // Expand and load comments
-      setComments(prev => ({
-        ...prev,
-        [submissionId]: {
-          messages: prev[submissionId]?.messages || [],
-          loading: true,
-          error: '',
-          expanded: true,
-          unreadCount: prev[submissionId]?.unreadCount || 0,
-          readStatuses: prev[submissionId]?.readStatuses || []
-        }
-      }))
-      await loadComments(submissionId)
+  const handleRequestRevision = async (submissionId: string) => {
+    try {
+      await instructorApi.updateSubmission(submissionId, {
+        status: 'NEEDS_REVISION',
+        feedback: revisionFeedback[submissionId] || ''
+      })
+      setShowRevisionBox(prev => ({ ...prev, [submissionId]: false }))
+      setRevisionFeedback(prev => ({ ...prev, [submissionId]: '' }))
+      await loadSubmissions()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to request revision')
     }
   }
 
@@ -216,175 +224,161 @@ export default function SubmissionsTab({ groupId, proteinPdbId }: Props) {
     )
   }
 
-  const submittedModels = models.filter(m => m.submission)
-  const pendingModels = models.filter(m => !m.submission)
-
   return (
     <div>
-      {submittedModels.length === 0 && pendingModels.length === 0 ? (
+      {models.length === 0 ? (
         <div className="bg-white rounded-lg shadow p-8 text-center text-gray-500">
           No model templates have been created yet.
         </div>
       ) : (
-        <>
-          {/* Submitted Models */}
-          {submittedModels.length > 0 && (
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium text-gray-800">
-                Submitted Models ({submittedModels.length})
-              </h3>
-              {submittedModels.map((model) => (
-                <div key={model.id} className="bg-white rounded-lg shadow p-6">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <div className="flex items-center gap-3">
-                        <h4 className="text-lg font-semibold text-gray-800">{model.name}</h4>
-                        {model.submission && getStatusBadge(model.submission.status)}
-                      </div>
-                      {model.description && (
-                        <p className="text-sm text-gray-600 mt-1">{model.description}</p>
-                      )}
-                    </div>
-
-                    {/* Status Dropdown */}
-                    {model.submission && (
-                      <select
-                        value={model.submission.status}
-                        onChange={(e) => handleStatusChange(model.submission!.id, e.target.value)}
-                        className="text-sm border border-gray-300 rounded-md px-3 py-1.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      >
-                        <option value="SUBMITTED">Submitted</option>
-                        <option value="NEEDS_REVISION">Needs Revision</option>
-                        <option value="APPROVED">Approved</option>
-                      </select>
+        <div className="grid grid-cols-2 gap-4">
+          {models.map((model) => (
+            <div key={model.id} className={`bg-white rounded-lg shadow p-4 flex flex-col max-h-120 overflow-hidden ${!model.submission ? 'opacity-60' : ''}`}>
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <div className="flex items-center gap-3">
+                    <h4 className="text-lg font-semibold text-gray-800">{model.name}</h4>
+                    {model.submission ? getStatusBadge(model.submission.status) : (
+                      <span className="text-xs px-2 py-1 rounded-full bg-gray-100 text-gray-400">No submission</span>
                     )}
                   </div>
-
-                  {model.submission && (
-                    <>
-                      {/* Submission Info */}
-                      <div className="text-sm text-gray-500 mb-4">
-                        Submitted by{' '}
-                        <span className="font-medium text-gray-700">
-                          {model.submission.submittedBy.firstName} {model.submission.submittedBy.lastName}
-                        </span>
-                        {' '}on {formatDate(model.submission.createdAt)}
-                      </div>
-
-                      {/* Image and Viewer */}
-                      <div className="flex gap-4 items-start mb-4">
-                        <img
-                          src={`${instructorApi.getSubmissionFileUrl(model.submission.id)}&t=${new Date(model.submission.updatedAt).getTime()}`}
-                          alt={model.name}
-                          className="max-w-md h-auto rounded-md border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity"
-                          style={{ maxHeight: '300px' }}
-                          onClick={() => openViewer(model.submission!.id, model.name, model.id)}
-                        />
-                        <div className="flex flex-col gap-2">
-                          <button
-                            onClick={() => openViewer(model.submission!.id, model.name, model.id)}
-                            className="flex items-center gap-2 bg-purple-600 text-white px-4 py-2 rounded-md hover:bg-purple-700 transition-colors text-sm"
-                          >
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" />
-                            </svg>
-                            View in 3D
-                          </button>
-                          <p className="text-xs text-gray-500">
-                            Click image or button to open interactive viewer
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Comments Section */}
-                      <div className="border-t pt-4">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => toggleComments(model.submission!.id)}
-                            className="flex items-center gap-2 text-sm font-medium text-gray-700 hover:text-blue-600"
-                          >
-                            <svg
-                              className={`w-4 h-4 transition-transform ${comments[model.submission.id]?.expanded ? 'rotate-90' : ''}`}
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                            </svg>
-                            Comments
-                            {comments[model.submission.id]?.messages?.length > 0 && (
-                              <span className="bg-blue-100 text-blue-700 text-xs px-2 py-0.5 rounded-full">
-                                {comments[model.submission.id].messages.length}
-                              </span>
-                            )}
-                            {(comments[model.submission.id]?.unreadCount ?? model.submission?.unreadCount ?? 0) > 0 && (
-                              <span className="w-2 h-2 bg-red-500 rounded-full" title="Unread comments" />
-                            )}
-                          </button>
-                          <button
-                            onClick={() => openDiscussionModal(model.submission!.id, model.name)}
-                            className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
-                            title="Open in full view"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                            </svg>
-                          </button>
-                        </div>
-
-                        {comments[model.submission.id]?.expanded && (
-                          <div className="mt-3 bg-gray-50 rounded-lg p-4 overflow-hidden" style={{ height: '400px' }}>
-                            <CommentThread
-                              messages={comments[model.submission.id]?.messages || []}
-                              loading={comments[model.submission.id]?.loading || false}
-                              error={comments[model.submission.id]?.error || ''}
-                              onPost={(content) => postComment(model.submission!.id, content)}
-                              onRefresh={() => loadComments(model.submission!.id)}
-                              placeholder="Write a comment..."
-                              emptyMessage="No comments yet. Start the conversation!"
-                              currentUserId={user?.id}
-                              onMarkRead={(lastReadAt) => markCommentsRead(model.submission!.id, lastReadAt)}
-                              readStatuses={comments[model.submission.id]?.readStatuses || []}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </>
+                  {model.description && (
+                    <p className="text-sm text-gray-600 mt-1">{model.description}</p>
                   )}
                 </div>
-              ))}
-            </div>
-          )}
 
-          {/* Pending Models */}
-          {pendingModels.length > 0 && (
-            <div className={submittedModels.length > 0 ? 'mt-8' : ''}>
-              <h3 className="text-lg font-medium text-gray-800 mb-4">
-                Awaiting Submission ({pendingModels.length})
-              </h3>
-              <div className="grid gap-3">
-                {pendingModels.map((model) => (
-                  <div key={model.id} className="bg-white rounded-lg shadow p-4 opacity-60">
-                    <div className="flex items-center gap-3">
-                      <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <div className="flex items-center gap-3">
+                  {/* Primary action buttons — only for SUBMITTED */}
+                  {model.submission?.status === 'SUBMITTED' && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleApprove(model.submission!.id)}
+                        className="px-3 py-1.5 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 transition-colors"
+                      >
+                        Approve
+                      </button>
+                      <button
+                        onClick={() => setShowRevisionBox(prev => ({ ...prev, [model.submission!.id]: !prev[model.submission!.id] }))}
+                        className="px-3 py-1.5 bg-amber-500 text-white text-sm font-medium rounded-md hover:bg-amber-600 transition-colors"
+                      >
+                        Request Revision
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Escape-hatch dropdown — always present when there's a submission, intentionally muted */}
+                  {model.submission && (
+                    <select
+                      value={model.submission.status}
+                      onChange={(e) => handleStatusChange(model.submission!.id, e.target.value)}
+                      className="text-xs border border-gray-200 text-gray-400 rounded px-2 py-1 focus:ring-1 focus:ring-gray-300 focus:border-gray-300 bg-transparent"
+                      title="Override status"
+                    >
+                      <option value="DRAFT">Draft</option>
+                      <option value="SUBMITTED">Submitted</option>
+                      <option value="NEEDS_REVISION">Needs Revision</option>
+                      <option value="APPROVED">Approved</option>
+                    </select>
+                  )}
+                </div>
+              </div>
+
+              {/* Revision feedback box */}
+              {model.submission && showRevisionBox[model.submission.id] && (
+                <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-md">
+                  <p className="text-sm font-medium text-amber-800 mb-2">Feedback for student:</p>
+                  <textarea
+                    value={revisionFeedback[model.submission.id] || ''}
+                    onChange={(e) => setRevisionFeedback(prev => ({ ...prev, [model.submission!.id]: e.target.value }))}
+                    placeholder="Describe what needs to be revised..."
+                    rows={3}
+                    className="w-full text-sm border border-amber-300 rounded p-2 focus:outline-none focus:ring-2 focus:ring-amber-400"
+                  />
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={() => handleRequestRevision(model.submission!.id)}
+                      className="px-3 py-1.5 bg-amber-500 text-white text-sm font-medium rounded hover:bg-amber-600 transition-colors"
+                    >
+                      Send
+                    </button>
+                    <button
+                      onClick={() => setShowRevisionBox(prev => ({ ...prev, [model.submission!.id]: false }))}
+                      className="px-3 py-1.5 text-sm text-gray-600 hover:text-gray-800"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {model.submission && (
+                <div className="mt-3 flex gap-4 flex-1 min-h-0">
+                  {/* Left: thumbnail + 3D button */}
+                  <div className="flex flex-col gap-2 shrink-0 w-40">
+                    <img
+                      src={`${instructorApi.getSubmissionFileUrl(model.submission.id)}&t=${new Date(model.submission.updatedAt).getTime()}`}
+                      alt={model.name}
+                      className="w-full h-auto rounded-md border border-gray-200 cursor-pointer hover:opacity-90 transition-opacity object-cover"
+                      style={{ maxHeight: '200px' }}
+                      onClick={() => openViewer(model.submission!.id, model.name, model.id)}
+                    />
+                    <button
+                      onClick={() => openViewer(model.submission!.id, model.name, model.id)}
+                      className="flex items-center justify-center gap-1.5 bg-purple-600 text-white px-3 py-1.5 rounded-md hover:bg-purple-700 transition-colors text-sm"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" />
                       </svg>
-                      <div>
-                        <h4 className="font-medium text-gray-700">{model.name}</h4>
-                        {model.description && (
-                          <p className="text-sm text-gray-500">{model.description}</p>
+                      View in 3D
+                    </button>
+                    <p className="text-xs text-gray-400 text-center">
+                      by {model.submission.submittedBy.firstName} {model.submission.submittedBy.lastName}
+                      <br />{formatDate(model.submission.createdAt)}
+                    </p>
+                  </div>
+
+                  {/* Right: comment thread */}
+                  <div className="flex-1 flex flex-col min-w-0 border border-gray-100 rounded-lg overflow-hidden">
+                    <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100 bg-gray-50">
+                      <span className="text-xs font-medium text-gray-500 flex items-center gap-1.5">
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                        </svg>
+                        Comments
+                        {(comments[model.submission.id]?.unreadCount ?? model.submission.unreadCount ?? 0) > 0 && (
+                          <span className="w-2 h-2 bg-red-500 rounded-full" title="Unread comments" />
                         )}
-                      </div>
+                      </span>
+                      <button
+                        onClick={() => openDiscussionModal(model.submission!.id, model.name)}
+                        className="p-1 text-gray-400 hover:text-blue-600 transition-colors"
+                        title="Open in full view"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                        </svg>
+                      </button>
+                    </div>
+                    <div className="flex-1 overflow-hidden p-3" style={{ minHeight: '0' }}>
+                      <CommentThread
+                        messages={comments[model.submission.id]?.messages || []}
+                        loading={comments[model.submission.id]?.loading || false}
+                        error={comments[model.submission.id]?.error || ''}
+                        onPost={(content) => postComment(model.submission!.id, content)}
+                        onRefresh={() => loadComments(model.submission!.id)}
+                        placeholder="Write a comment..."
+                        emptyMessage="No comments yet."
+                        currentUserId={user?.id}
+                        onMarkRead={(lastReadAt) => markCommentsRead(model.submission!.id, lastReadAt)}
+                        readStatuses={comments[model.submission.id]?.readStatuses || []}
+                      />
                     </div>
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
             </div>
-          )}
-        </>
+          ))}
+        </div>
       )}
 
       {/* 3D Viewer Modal */}

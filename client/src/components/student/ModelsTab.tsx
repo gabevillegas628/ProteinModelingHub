@@ -31,13 +31,12 @@ export default function ModelsTab() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [uploading, setUploading] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState<string | null>(null)
+  const [withdrawing, setWithdrawing] = useState<string | null>(null)
   const [viewer, setViewer] = useState<ViewerState>({ isOpen: false, fileUrl: '', modelName: '' })
   const [comments, setComments] = useState<CommentsState>({})
   const [discussionModal, setDiscussionModal] = useState<{ submissionId: string; modelName: string } | null>(null)
   const fileInputRefs = useRef<Record<string, HTMLInputElement | null>>({})
-  const [reviewStatus, setReviewStatus] = useState<studentApi.ReviewStatus | null>(null)
-  const [requestingReview, setRequestingReview] = useState(false)
-  const [reviewMessage, setReviewMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
   const [editingProtein, setEditingProtein] = useState(false)
   const [proteinForm, setProteinForm] = useState({ pdbId: '', name: '' })
   const [savingProtein, setSavingProtein] = useState(false)
@@ -45,22 +44,7 @@ export default function ModelsTab() {
 
   useEffect(() => {
     loadModels()
-    loadReviewStatus()
   }, [])
-
-  // Update cooldown timer every minute
-  useEffect(() => {
-    if (reviewStatus?.cooldownEndsAt) {
-      const interval = setInterval(() => {
-        const now = Date.now()
-        const endTime = new Date(reviewStatus.cooldownEndsAt!).getTime()
-        if (now >= endTime) {
-          setReviewStatus(prev => prev ? { ...prev, canRequest: true, cooldownEndsAt: null } : null)
-        }
-      }, 60000)
-      return () => clearInterval(interval)
-    }
-  }, [reviewStatus?.cooldownEndsAt])
 
   const loadModels = async () => {
     try {
@@ -74,41 +58,30 @@ export default function ModelsTab() {
     }
   }
 
-  const loadReviewStatus = async () => {
+  const handleSubmitForReview = async (templateId: string) => {
     try {
-      const status = await studentApi.getReviewStatus()
-      setReviewStatus(status)
+      setSubmitting(templateId)
+      setError('')
+      await studentApi.submitModel(templateId)
+      await loadModels()
     } catch (err) {
-      console.error('Failed to load review status:', err)
-    }
-  }
-
-  const handleRequestReview = async () => {
-    try {
-      setRequestingReview(true)
-      setReviewMessage(null)
-      const response = await studentApi.requestReview()
-      setReviewMessage({ type: 'success', text: response.message })
-      setReviewStatus({
-        lastReviewRequestedAt: response.lastReviewRequestedAt,
-        canRequest: false,
-        cooldownEndsAt: new Date(new Date(response.lastReviewRequestedAt).getTime() + 60 * 60 * 1000).toISOString()
-      })
-    } catch (err) {
-      setReviewMessage({ type: 'error', text: err instanceof Error ? err.message : 'Failed to request review' })
+      setError(err instanceof Error ? err.message : 'Failed to submit model')
     } finally {
-      setRequestingReview(false)
+      setSubmitting(null)
     }
   }
 
-  const formatCooldownTime = (endTime: string) => {
-    const remaining = new Date(endTime).getTime() - Date.now()
-    if (remaining <= 0) return null
-    const minutes = Math.ceil(remaining / (1000 * 60))
-    if (minutes >= 60) {
-      return `${Math.floor(minutes / 60)}h ${minutes % 60}m`
+  const handleWithdraw = async (submissionId: string) => {
+    try {
+      setWithdrawing(submissionId)
+      setError('')
+      await studentApi.withdrawModel(submissionId)
+      await loadModels()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to withdraw submission')
+    } finally {
+      setWithdrawing(null)
     }
-    return `${minutes}m`
   }
 
   const startEditingProtein = () => {
@@ -393,52 +366,7 @@ export default function ModelsTab() {
           )}
         </div>
 
-        {/* Request Review Section */}
-        {visibleModels.length > 0 && (
-        <div className="flex flex-col items-end gap-2">
-          <button
-            onClick={handleRequestReview}
-            disabled={requestingReview || !reviewStatus?.canRequest}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-              reviewStatus?.canRequest
-                ? 'bg-green-600 text-white hover:bg-green-700'
-                : 'bg-gray-200 text-gray-500 cursor-not-allowed'
-            }`}
-            title={reviewStatus?.canRequest ? 'Send an email to instructors with your current submissions' : 'Please wait before requesting another review'}
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-            </svg>
-            {requestingReview ? 'Sending...' : 'Request Review'}
-          </button>
-          {reviewStatus?.cooldownEndsAt && formatCooldownTime(reviewStatus.cooldownEndsAt) && (
-            <span className="text-xs text-gray-500">
-              Available again in {formatCooldownTime(reviewStatus.cooldownEndsAt)}
-            </span>
-          )}
-          {reviewStatus?.lastReviewRequestedAt && reviewStatus.canRequest && (
-            <span className="text-xs text-gray-500">
-              Last requested: {new Date(reviewStatus.lastReviewRequestedAt).toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit'
-              })}
-            </span>
-          )}
-        </div>
-        )}
       </div>
-
-      {/* Review Request Message */}
-      {reviewMessage && (
-        <div className={`mb-4 p-3 rounded-md ${
-          reviewMessage.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-600'
-        }`}>
-          {reviewMessage.text}
-          <button onClick={() => setReviewMessage(null)} className="ml-2 underline">Dismiss</button>
-        </div>
-      )}
 
       {error && (
         <div className="bg-red-50 text-red-600 p-3 rounded-md mb-4">
@@ -468,63 +396,101 @@ export default function ModelsTab() {
                   )}
 
                   {model.submission ? (
-                    <div className="bg-gray-50 rounded-md p-3 text-sm">
-                      <div className="flex items-center gap-4 text-gray-600">
-                        <span className="font-medium">{model.submission.fileName}</span>
-                        <span>{formatFileSize(model.submission.fileSize)}</span>
-                        <span>Uploaded {formatDate(model.submission.createdAt)}</span>
+                    <>
+                      <div className="bg-gray-50 rounded-md p-3 text-sm">
+                        <div className="flex items-center gap-4 text-gray-600">
+                          <span className="font-medium">{model.submission.fileName}</span>
+                          <span>{formatFileSize(model.submission.fileSize)}</span>
+                          <span>Uploaded {formatDate(model.submission.createdAt)}</span>
+                        </div>
                       </div>
-                    </div>
+                      {model.submission.status === 'NEEDS_REVISION' && model.submission.feedback && (
+                        <div className="mt-2 bg-amber-50 border border-amber-200 rounded-md p-3 text-sm">
+                          <p className="font-medium text-amber-800 mb-1">Instructor feedback:</p>
+                          <p className="text-amber-700">{model.submission.feedback}</p>
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <p className="text-sm text-gray-400 italic">No submission yet</p>
                   )}
                 </div>
 
                 <div className="ml-4 flex flex-col gap-2 items-end">
-                  <input
-                    type="file"
-                    accept=".jpg,.jpeg,.png"
-                    ref={(el) => { fileInputRefs.current[model.id] = el }}
-                    onChange={(e) => {
-                      const file = e.target.files?.[0]
-                      if (file) {
-                        handleFileSelect(model.id, file)
-                        e.target.value = ''
-                      }
-                    }}
-                    className="hidden"
-                  />
-                  <button
-                    onClick={() => handleUploadClick(model.id)}
-                    disabled={uploading === model.id}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400 transition-colors text-sm"
-                  >
-                    {uploading === model.id
-                      ? 'Uploading...'
-                      : model.submission
-                        ? 'Replace'
-                        : 'Upload'}
-                  </button>
-                  {!model.submission && (
+                  {/* Upload/Replace — hidden when locked */}
+                  {(!model.submission || model.submission.status === 'DRAFT' || model.submission.status === 'NEEDS_REVISION') && (
+                    <>
+                      <input
+                        type="file"
+                        accept=".jpg,.jpeg,.png"
+                        ref={(el) => { fileInputRefs.current[model.id] = el }}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) {
+                            handleFileSelect(model.id, file)
+                            e.target.value = ''
+                          }
+                        }}
+                        className="hidden"
+                      />
+                      <button
+                        onClick={() => handleUploadClick(model.id)}
+                        disabled={uploading === model.id}
+                        className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 disabled:bg-gray-400 transition-colors text-sm"
+                      >
+                        {uploading === model.id ? 'Uploading...' : model.submission ? 'Replace' : 'Upload'}
+                      </button>
+                      <button
+                        onClick={() => setNewPickerOpen(newPickerOpen === model.id ? null : model.id)}
+                        className={`flex items-center gap-1.5 px-4 py-2 rounded-md transition-colors text-sm font-medium ${
+                          newPickerOpen === model.id ? 'bg-indigo-700 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                        }`}
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        New
+                      </button>
+                    </>
+                  )}
+
+                  {/* Submit for Review — shown when DRAFT and has a file */}
+                  {model.submission?.status === 'DRAFT' && (
                     <button
-                      onClick={() => setNewPickerOpen(newPickerOpen === model.id ? null : model.id)}
-                      className={`flex items-center gap-1.5 px-4 py-2 rounded-md transition-colors text-sm font-medium ${
-                        newPickerOpen === model.id
-                          ? 'bg-indigo-700 text-white'
-                          : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                      }`}
+                      onClick={() => handleSubmitForReview(model.id)}
+                      disabled={submitting === model.id}
+                      className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:bg-gray-400 transition-colors text-sm font-medium"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                      </svg>
-                      New
+                      {submitting === model.id ? 'Submitting...' : 'Submit for Review'}
+                    </button>
+                  )}
+
+                  {/* Resubmit — shown when NEEDS_REVISION */}
+                  {model.submission?.status === 'NEEDS_REVISION' && (
+                    <button
+                      onClick={() => handleSubmitForReview(model.id)}
+                      disabled={submitting === model.id}
+                      className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 disabled:bg-gray-400 transition-colors text-sm font-medium"
+                    >
+                      {submitting === model.id ? 'Submitting...' : 'Resubmit for Review'}
+                    </button>
+                  )}
+
+                  {/* Withdraw — shown when SUBMITTED */}
+                  {model.submission?.status === 'SUBMITTED' && (
+                    <button
+                      onClick={() => handleWithdraw(model.submission!.id)}
+                      disabled={withdrawing === model.submission.id}
+                      className="text-sm text-gray-500 hover:text-red-600 underline disabled:opacity-50 transition-colors"
+                    >
+                      {withdrawing === model.submission.id ? 'Withdrawing...' : 'Withdraw Submission'}
                     </button>
                   )}
                 </div>
               </div>
 
               {/* Inline picker: choose starting point for a new model */}
-              {!model.submission && newPickerOpen === model.id && (
+              {(!model.submission || model.submission.status === 'DRAFT' || model.submission.status === 'NEEDS_REVISION') && newPickerOpen === model.id && (
                 <div className="mt-4 pt-4 border-t border-gray-100">
                   <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">Start from</p>
                   <div className="flex gap-3 flex-wrap">

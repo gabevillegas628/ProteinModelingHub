@@ -129,6 +129,14 @@ export async function uploadModel(templateId: string, file: File): Promise<Submi
   });
 }
 
+export function submitModel(templateId: string): Promise<Submission> {
+  return request(`/models/${templateId}/submit`, { method: 'POST' });
+}
+
+export function withdrawModel(submissionId: string): Promise<Submission> {
+  return request(`/models/${submissionId}/withdraw`, { method: 'POST' });
+}
+
 export function getModelFileUrl(submissionId: string): string {
   const token = localStorage.getItem('token');
   // Add .png extension so JSmol can detect the file type from the URL

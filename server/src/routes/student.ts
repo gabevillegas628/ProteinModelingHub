@@ -258,6 +258,13 @@ router.post('/models/:templateId/upload', modelUpload.single('file'), async (req
       orderBy: { createdAt: 'desc' }
     });
 
+    // Prevent upload if submission is locked (under review or approved)
+    if (existingSubmission && (existingSubmission.status === 'SUBMITTED' || existingSubmission.status === 'APPROVED')) {
+      fs.unlinkSync(file.path);
+      res.status(403).json({ error: 'This submission is locked. Withdraw it before making changes.' });
+      return;
+    }
+
     let submission;
 
     if (existingSubmission) {
@@ -269,7 +276,7 @@ router.post('/models/:templateId/upload', modelUpload.single('file'), async (req
         }
       }
 
-      // Update existing submission (preserves messages/comments)
+      // Update existing submission — preserve current status (DRAFT or NEEDS_REVISION)
       submission = await prisma.submission.update({
         where: { id: existingSubmission.id },
         data: {
@@ -277,13 +284,11 @@ router.post('/models/:templateId/upload', modelUpload.single('file'), async (req
           fileName: file.originalname,
           filePath: file.filename,
           fileSize: file.size,
-          status: 'SUBMITTED',
-          createdAt: new Date(),
           updatedAt: new Date()
         }
       });
     } else {
-      // Create new submission
+      // Create new submission as DRAFT
       submission = await prisma.submission.create({
         data: {
           groupId: group.id,
@@ -292,7 +297,7 @@ router.post('/models/:templateId/upload', modelUpload.single('file'), async (req
           fileName: file.originalname,
           filePath: file.filename,
           fileSize: file.size,
-          status: 'SUBMITTED'
+          status: 'DRAFT'
         }
       });
     }
@@ -367,6 +372,13 @@ router.put('/models/:submissionId/replace', modelUpload.single('file'), async (r
       return;
     }
 
+    // Prevent replace if submission is locked
+    if (submission.status === 'SUBMITTED' || submission.status === 'APPROVED') {
+      fs.unlinkSync(file.path);
+      res.status(403).json({ error: 'This submission is locked. Withdraw it before making changes.' });
+      return;
+    }
+
     // Delete old file
     const oldPath = path.join(MODELS_DIR, submission.filePath);
     if (fs.existsSync(oldPath)) {
@@ -389,6 +401,79 @@ router.put('/models/:submissionId/replace', modelUpload.single('file'), async (r
   } catch (error) {
     console.error('Error replacing submission:', error);
     res.status(500).json({ error: 'Failed to replace submission' });
+  }
+});
+
+// Submit a draft/revision for review (DRAFT | NEEDS_REVISION → SUBMITTED)
+router.post('/models/:templateId/submit', async (req: AuthRequest, res: Response) => {
+  try {
+    const templateId = req.params.templateId as string;
+    const group = await getStudentGroup(req.user!.userId);
+    if (!group) {
+      res.status(404).json({ error: 'You are not assigned to a group' });
+      return;
+    }
+
+    const submission = await prisma.submission.findFirst({
+      where: { groupId: group.id, modelTemplateId: templateId },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    if (!submission) {
+      res.status(404).json({ error: 'No submission found for this template' });
+      return;
+    }
+
+    if (submission.status !== 'DRAFT' && submission.status !== 'NEEDS_REVISION') {
+      res.status(400).json({ error: 'Submission is not in a submittable state' });
+      return;
+    }
+
+    const updated = await prisma.submission.update({
+      where: { id: submission.id },
+      data: { status: 'SUBMITTED', updatedAt: new Date() }
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Error submitting model:', error);
+    res.status(500).json({ error: 'Failed to submit model' });
+  }
+});
+
+// Withdraw a submitted model back to draft (SUBMITTED → DRAFT)
+router.post('/models/:submissionId/withdraw', async (req: AuthRequest, res: Response) => {
+  try {
+    const submissionId = req.params.submissionId as string;
+    const group = await getStudentGroup(req.user!.userId);
+    if (!group) {
+      res.status(404).json({ error: 'You are not assigned to a group' });
+      return;
+    }
+
+    const submission = await prisma.submission.findUnique({
+      where: { id: submissionId }
+    });
+
+    if (!submission || submission.groupId !== group.id) {
+      res.status(404).json({ error: 'Submission not found' });
+      return;
+    }
+
+    if (submission.status !== 'SUBMITTED') {
+      res.status(400).json({ error: 'Only submitted models can be withdrawn' });
+      return;
+    }
+
+    const updated = await prisma.submission.update({
+      where: { id: submissionId },
+      data: { status: 'DRAFT', updatedAt: new Date() }
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Error withdrawing model:', error);
+    res.status(500).json({ error: 'Failed to withdraw model' });
   }
 });
 
