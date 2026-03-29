@@ -27,5 +27,8 @@ Thumbs.db
 # Uploaded files (use volume storage in production)
 server/uploads/
 
+# JSmol library (managed separately via deployment/update-jsmol.sh)
+client/public/jsmol/
+
 # Test coverage
 coverage/
