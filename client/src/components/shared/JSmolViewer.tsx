@@ -70,7 +70,8 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   const consoleRef = useRef<HTMLDivElement>(null)
   const consolePopoutRef = useRef<HTMLDivElement>(null)
   const appletRef = useRef<JmolApplet | null>(null)
-  const scriptErrorFiredRef = useRef(false)
+  const consoleDivIdRef = useRef(`jsmolInfoDiv_${Math.random().toString(36).slice(2)}`)
+  const consoleObserverRef = useRef<MutationObserver | null>(null)
   const consoleDragRef = useRef({ active: false, startX: 0, startY: 0, startPosX: 0, startPosY: 0 })
 
   const originalStateRef = useRef<{ stateCommands: string | null }>({ stateCommands: null })
@@ -316,15 +317,58 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
           color: '0x111827',  // Match Tailwind's gray-900
           use: 'HTML5',
           j2sPath: '/modeling/jsmol/j2s',  // Local path (includes subdirectory prefix)
+          console: consoleDivIdRef.current,
           disableJ2SLoadMonitor: true,
           disableInitialConsole: true,
           allowJavaScript: true,
           readyFunction: () => {
             appletReadyRef.current = true
             if (appletRef.current && window.Jmol) {
-              // Register callbacks now that the applet is ready
-              window.Jmol.setCallback(appletRef.current!, 'pick', pickCbName)
-              window.Jmol.setCallback(appletRef.current!, 'script', scriptCbName)
+
+              // Wire up MutationObserver on the hidden JSmol infodiv so we get
+              // accurate console output (print, errors, etc.) directly from JSmol.
+              const consoleEl = document.getElementById(consoleDivIdRef.current)
+              if (consoleEl) {
+                consoleEl.innerHTML = ''
+                if (consoleObserverRef.current) consoleObserverRef.current.disconnect()
+                consoleObserverRef.current = new MutationObserver((mutations) => {
+                  let lastWasScriptError = false
+                  for (const mutation of mutations) {
+                    for (const node of Array.from(mutation.addedNodes)) {
+                      if (node.nodeType !== Node.ELEMENT_NODE) continue
+                      const el = node as HTMLElement
+                      const text = el.textContent?.replace(/[\n\r]/g, '').trim()
+                      if (!text) continue
+                      // Filter script lifecycle noise
+                      if (/^script \d+ started$/i.test(text)) continue
+                      if (/^script completed$/i.test(text)) continue
+                      if (/^jmol script terminated$/i.test(text)) continue
+                      // Filter internal subsystem messages — CamelCase names (FileManager, ActionManager, ModelSet, etc.)
+                      if (/^[A-Z][a-z]+[A-Z]/.test(text)) continue
+                      // Filter other internal patterns not caught by the CamelCase rule
+                      if (/^setStatus/.test(text)) continue
+                      if (/^loadScript /i.test(text)) continue
+                      if (/^Time for /.test(text)) continue
+                      if (/^The Resolver/.test(text)) continue
+                      // Filter eval ERROR debug dump — keep only the script ERROR: line
+                      if (/^eval ERROR:/i.test(text)) continue
+                      if (/^----$/.test(text)) continue
+                      if (/^Token\[/.test(text)) continue
+                      if (/^(Eval|END)$/.test(text)) continue
+                      if (/^pc:\d+$/.test(text)) continue
+                      if (/^\d+ statement/.test(text)) continue
+                      // Drop the offending command line that follows a script ERROR
+                      if (lastWasScriptError) { lastWasScriptError = false; continue }
+
+                      const color = el.style?.color ?? ''
+                      const type = /^script ERROR:/i.test(text) || color.includes('red') ? 'error' : 'output'
+                      lastWasScriptError = /^script ERROR:/i.test(text)
+                      setConsoleLog(prev => [...prev, { type, text }])
+                    }
+                  }
+                })
+                consoleObserverRef.current.observe(consoleEl, { childList: true })
+              }
 
               // Set up base rendering settings
               const baseSettings = `
@@ -362,27 +406,6 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
         const appletName = 'jsmolViewer_' + Date.now()
 
-        // Register global callbacks before creating the applet.
-        const pickCbName = appletName + '_pickCallback'
-        ;(window as unknown as Record<string, unknown>)[pickCbName] = (
-          _htmlName: string,
-          strInfo: string
-        ) => {
-          if (!strInfo) return
-          setConsoleLog(prev => [...prev, { type: 'output', text: strInfo }])
-        }
-
-        // Script callback: Jmol calls this on every script status change.
-        // args[4] = strErrorMessageUntranslated — non-null only when an actual error occurred,
-        // regardless of whether _errorMessage is set (which misses many runtime errors).
-        const scriptCbName = appletName + '_scriptCallback'
-        ;(window as unknown as Record<string, unknown>)[scriptCbName] = (...args: unknown[]) => {
-          const errorMsg = args[4]
-          if (!errorMsg || typeof errorMsg !== 'string' || !errorMsg.trim()) return
-          scriptErrorFiredRef.current = true
-          setConsoleLog(prev => [...prev, { type: 'error', text: errorMsg.trim() }])
-        }
-
         appletRef.current = window.Jmol.getApplet(appletName, Info)
 
         if (containerRef.current && appletRef.current) {
@@ -418,8 +441,10 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   }, [isOpen, fileUrl, proteinPdbId])
 
   useEffect(() => {
-    if (!isOpen && appletRef.current) {
+    if (!isOpen) {
       appletRef.current = null
+      consoleObserverRef.current?.disconnect()
+      consoleObserverRef.current = null
     }
   }, [isOpen])
 
@@ -429,6 +454,11 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = '' }
   }, [isOpen])
+
+  // Notify JSmol of its new canvas size after the console pops out or back in
+  useEffect(() => {
+    window.dispatchEvent(new Event('resize'))
+  }, [consolePopout])
 
   // Auto-scroll console to bottom when new entries are added
   useEffect(() => {
@@ -532,21 +562,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     setConsoleLog(prev => [...prev, { type: 'command', text: cmd }])
 
     if (appletRef.current && window.Jmol) {
-      // Run the command. Errors are reported via the script callback (args[4]).
-      scriptErrorFiredRef.current = false
       window.Jmol.script(appletRef.current, cmd)
-
-      // Report selection count unless the script callback already fired an error
-      setTimeout(() => {
-        if (appletRef.current && window.Jmol && !scriptErrorFiredRef.current) {
-          try {
-            const selectedCount = window.Jmol.evaluateVar(appletRef.current, '{selected}.count')
-            if (typeof selectedCount === 'number') {
-              setConsoleLog(prev => [...prev, { type: 'output', text: `${selectedCount} atom${selectedCount !== 1 ? 's' : ''} selected` }])
-            }
-          } catch { /* ignore */ }
-        }
-      }, 200)
     }
   }
 
@@ -938,6 +954,8 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
               </div>
             )}
             <div ref={containerRef} className="absolute inset-0" />
+            {/* Hidden div that JSmol routes all console output into */}
+            <div id={consoleDivIdRef.current} style={{ display: 'none' }} />
 
           </div>
 
