@@ -72,6 +72,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   const appletRef = useRef<JmolApplet | null>(null)
   const consoleDivIdRef = useRef(`jsmolInfoDiv_${Math.random().toString(36).slice(2)}`)
   const consoleObserverRef = useRef<MutationObserver | null>(null)
+  const suppressConsoleRef = useRef(true)
   const consoleDragRef = useRef({ active: false, startX: 0, startY: 0, startPosX: 0, startPosY: 0 })
 
   const originalStateRef = useRef<{ stateCommands: string | null }>({ stateCommands: null })
@@ -331,6 +332,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
               if (consoleEl) {
                 consoleEl.innerHTML = ''
                 if (consoleObserverRef.current) consoleObserverRef.current.disconnect()
+                suppressConsoleRef.current = true
                 consoleObserverRef.current = new MutationObserver((mutations) => {
                   let lastWasScriptError = false
                   for (const mutation of mutations) {
@@ -339,6 +341,11 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
                       const el = node as HTMLElement
                       const text = el.textContent?.replace(/[\n\r]/g, '').trim()
                       if (!text) continue
+                      // Suppress all output until the init script finishes
+                      if (suppressConsoleRef.current) {
+                        if (text === '__init_done__') suppressConsoleRef.current = false
+                        continue
+                      }
                       // Filter script lifecycle noise
                       if (/^script \d+ started$/i.test(text)) continue
                       if (/^script completed$/i.test(text)) continue
@@ -387,6 +394,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
               window.Jmol.script(appletRef.current!, `
                 ${baseSettings}
                 ${loadCommand}
+                print "__init_done__";
               `)
 
               // Store original state for reset functionality
