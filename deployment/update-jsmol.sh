@@ -57,5 +57,11 @@ cp -r "$JSMOL_SOURCE/j2s" "$JSMOL_DIR/"
 # Cleanup
 rm -rf "$TEMP_DIR"
 
-echo "Done! JSmol updated to latest version."
-echo "Please test the viewer to ensure compatibility."
+echo ""
+echo "================================================================"
+echo "  JSmol updated successfully."
+echo ""
+echo "  IMPORTANT: You must rebuild the frontend for changes to take"
+echo "  effect. Run: ./manage.sh rebuild"
+echo "================================================================"
+echo ""
