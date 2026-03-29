@@ -301,7 +301,7 @@ export default function UsersTab() {
                       <span className="text-yellow-600 text-sm font-medium">Pending</span>
                     )}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                  <td className="px-6 py-4 text-sm text-gray-500 max-w-xs">
                     {user.groupMemberships && user.groupMemberships.length > 0
                       ? user.groupMemberships.map(m => m.group.name).join(', ')
                       : '-'}
