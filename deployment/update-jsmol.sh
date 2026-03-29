@@ -1,23 +1,17 @@
 #!/bin/bash
-# Script to update JSmol to a specific version
-# Usage: ./update-jsmol.sh [version]
-# Example: ./update-jsmol.sh 16.2.7
+# Script to update JSmol to the latest version
+# Usage: ./update-jsmol.sh
 
 set -e
 
-VERSION="${1:-16.2.7}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 JSMOL_DIR="$SCRIPT_DIR/../client/public/jsmol"
 TEMP_DIR=$(mktemp -d)
 
-echo "Updating JSmol to version $VERSION..."
+echo "Updating JSmol to latest version..."
 
-# Download from SourceForge
-# Note: SourceForge URLs can be tricky - this is the direct download pattern
-DOWNLOAD_URL="https://sourceforge.net/projects/jmol/files/Jmol/Version%20${VERSION%.*}.${VERSION##*.}/Jmol%20${VERSION}/Jmol-${VERSION}-binary.zip/download"
-
-echo "Downloading from: $DOWNLOAD_URL"
-curl -L -o "$TEMP_DIR/jmol.zip" "$DOWNLOAD_URL"
+echo "Downloading from SourceForge..."
+curl -L -o "$TEMP_DIR/jmol.zip" "https://sourceforge.net/projects/jmol/files/latest/download"
 
 echo "Extracting..."
 unzip -q "$TEMP_DIR/jmol.zip" -d "$TEMP_DIR"
@@ -54,5 +48,5 @@ cp -r "$JSMOL_SOURCE/php" "$JSMOL_DIR/"
 # Cleanup
 rm -rf "$TEMP_DIR"
 
-echo "Done! JSmol updated to version $VERSION"
+echo "Done! JSmol updated to latest version."
 echo "Please test the viewer to ensure compatibility."
