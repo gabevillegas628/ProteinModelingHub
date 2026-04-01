@@ -165,6 +165,13 @@ export function getUsers(): Promise<User[]> {
   return request('/users');
 }
 
+export function createUser(data: { email: string; firstName: string; lastName: string; role: 'ADMIN' | 'INSTRUCTOR' | 'STUDENT'; password?: string }): Promise<User> {
+  return request('/users', {
+    method: 'POST',
+    body: JSON.stringify(data)
+  });
+}
+
 export function getPendingUsers(): Promise<User[]> {
   return request('/users/pending');
 }

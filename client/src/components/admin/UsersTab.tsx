@@ -8,6 +8,14 @@ export default function UsersTab() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [editingUser, setEditingUser] = useState<adminApi.User | null>(null)
+  const [addingUser, setAddingUser] = useState(false)
+  const [newUserData, setNewUserData] = useState({
+    email: '',
+    firstName: '',
+    lastName: '',
+    role: 'STUDENT' as 'ADMIN' | 'INSTRUCTOR' | 'STUDENT',
+    password: ''
+  })
   const [formData, setFormData] = useState({
     email: '',
     firstName: '',
@@ -41,6 +49,25 @@ export default function UsersTab() {
       loadUsers()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to approve user')
+    }
+  }
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      const data: Parameters<typeof adminApi.createUser>[0] = {
+        email: newUserData.email,
+        firstName: newUserData.firstName,
+        lastName: newUserData.lastName,
+        role: newUserData.role,
+      }
+      if (newUserData.password) data.password = newUserData.password
+      await adminApi.createUser(data)
+      setAddingUser(false)
+      setNewUserData({ email: '', firstName: '', lastName: '', role: 'STUDENT', password: '' })
+      loadUsers()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create user')
     }
   }
 
@@ -134,6 +161,12 @@ export default function UsersTab() {
         </div>
         <div className="flex gap-2">
           <button
+            onClick={() => setAddingUser(true)}
+            className="px-4 py-2 rounded-md text-sm bg-blue-600 text-white hover:bg-blue-700 transition-colors"
+          >
+            + Add User
+          </button>
+          <button
             onClick={() => setFilter('all')}
             className={`px-4 py-2 rounded-md text-sm transition-colors ${
               filter === 'all'
@@ -160,6 +193,88 @@ export default function UsersTab() {
         <div className="bg-red-50 text-red-600 p-3 rounded-md mb-4">
           {error}
           <button onClick={() => setError('')} className="ml-2 underline">Dismiss</button>
+        </div>
+      )}
+
+      {/* Add User Modal */}
+      {addingUser && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 className="text-lg font-semibold mb-4">Add User</h3>
+            <form onSubmit={handleCreate} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                  <input
+                    type="text"
+                    value={newUserData.firstName}
+                    onChange={(e) => setNewUserData({ ...newUserData, firstName: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                  <input
+                    type="text"
+                    value={newUserData.lastName}
+                    onChange={(e) => setNewUserData({ ...newUserData, lastName: e.target.value })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={newUserData.email}
+                  onChange={(e) => setNewUserData({ ...newUserData, email: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                <select
+                  value={newUserData.role}
+                  onChange={(e) => setNewUserData({ ...newUserData, role: e.target.value as typeof newUserData.role })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="STUDENT">Student</option>
+                  <option value="INSTRUCTOR">Instructor</option>
+                  <option value="ADMIN">Admin</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Password <span className="text-gray-400 font-normal">(leave blank to generate)</span>
+                </label>
+                <input
+                  type="password"
+                  value={newUserData.password}
+                  onChange={(e) => setNewUserData({ ...newUserData, password: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter password..."
+                />
+              </div>
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setAddingUser(false)}
+                  className="px-4 py-2 text-gray-600 hover:text-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+                >
+                  Create
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 

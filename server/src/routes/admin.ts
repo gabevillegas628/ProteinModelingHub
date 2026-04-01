@@ -349,6 +349,49 @@ router.get('/users/pending', async (req: Request, res: Response) => {
   }
 });
 
+// Create user
+router.post('/users', async (req: Request, res: Response) => {
+  try {
+    const { email, firstName, lastName, role, password } = req.body;
+
+    if (!email || !firstName || !lastName || !role) {
+      res.status(400).json({ error: 'email, firstName, lastName, and role are required' });
+      return;
+    }
+
+    const hashedPassword = password ? await bcrypt.hash(password, 12) : await bcrypt.hash(crypto.randomBytes(32).toString('hex'), 12);
+
+    const user = await prisma.user.create({
+      data: {
+        email,
+        firstName,
+        lastName,
+        role,
+        password: hashedPassword,
+        isApproved: true,
+      },
+      select: {
+        id: true,
+        email: true,
+        firstName: true,
+        lastName: true,
+        role: true,
+        isApproved: true,
+        createdAt: true,
+      },
+    });
+    res.json(user);
+  } catch (error: unknown) {
+    const pgError = error as { code?: string };
+    if (pgError.code === 'P2002') {
+      res.status(400).json({ error: 'A user with that email already exists' });
+      return;
+    }
+    console.error('Error creating user:', error);
+    res.status(500).json({ error: 'Failed to create user' });
+  }
+});
+
 // Approve user
 router.post('/users/:id/approve', async (req: Request, res: Response) => {
   try {
