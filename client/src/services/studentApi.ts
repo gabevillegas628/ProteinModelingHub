@@ -1,7 +1,7 @@
 const API_BASE = '/modeling/api/student';
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('modeling_token');
 
   const headers: HeadersInit = {
     ...options.headers
@@ -138,7 +138,7 @@ export function withdrawModel(submissionId: string): Promise<Submission> {
 }
 
 export function getModelFileUrl(submissionId: string): string {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('modeling_token');
   // Add .png extension so JSmol can detect the file type from the URL
   return `${API_BASE}/models/file/${submissionId}.png?token=${token}`;
 }
@@ -166,7 +166,7 @@ export async function uploadLiterature(file: File, title: string, description?: 
 }
 
 export function getLiteratureFileUrl(id: string): string {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('modeling_token');
   return `${API_BASE}/literature/file/${id}?token=${token}`;
 }
 
@@ -215,7 +215,7 @@ export async function uploadPresentation(file: File, title: string, description?
 }
 
 export function getPresentationFileUrl(id: string): string {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('modeling_token');
   return `${API_BASE}/presentations/file/${id}?token=${token}`;
 }
 

@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
 import * as api from '../services/api'
+import { ApiError } from '../services/api'
 
 export type Role = 'ADMIN' | 'INSTRUCTOR' | 'STUDENT'
 
@@ -36,11 +37,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const token = localStorage.getItem('token')
+    const token = localStorage.getItem('modeling_token')
     if (token) {
       api.getCurrentUser()
         .then(data => setUser(data.user))
-        .catch(() => localStorage.removeItem('token'))
+        .catch((err) => {
+          // Only discard the token if the server explicitly rejected it (401).
+          // Network errors or server restarts (5xx) should not log the user out —
+          // the token is still valid and will work once the server is back.
+          if (err instanceof ApiError && err.status === 401) {
+            localStorage.removeItem('modeling_token')
+          }
+        })
         .finally(() => setLoading(false))
     } else {
       setLoading(false)
@@ -49,7 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string) => {
     const data = await api.login(email, password)
-    localStorage.setItem('token', data.token)
+    localStorage.setItem('modeling_token', data.token)
     setUser(data.user)
   }
 
@@ -58,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     // If we got a token, the user was auto-approved (admin)
     if (data.token) {
-      localStorage.setItem('token', data.token)
+      localStorage.setItem('modeling_token', data.token)
       setUser(data.user)
       return { needsApproval: false }
     }
@@ -68,7 +76,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const logout = () => {
-    localStorage.removeItem('token')
+    localStorage.removeItem('modeling_token')
     setUser(null)
   }
 

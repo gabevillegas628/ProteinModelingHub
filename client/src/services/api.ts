@@ -1,7 +1,14 @@
 const API_BASE = '/modeling/api'
 
+export class ApiError extends Error {
+  constructor(message: string, public status: number) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem('token')
+  const token = localStorage.getItem('modeling_token')
 
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
@@ -19,7 +26,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Request failed' }))
-    throw new Error(error.error || 'Request failed')
+    throw new ApiError(error.error || 'Request failed', response.status)
   }
 
   return response.json()

@@ -1,7 +1,7 @@
 const API_BASE = '/modeling/api/messages';
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('modeling_token');
 
   const headers: HeadersInit = {
     'Content-Type': 'application/json',

@@ -1,7 +1,7 @@
 const API_BASE = '/modeling/api/instructor';
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('modeling_token');
 
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
@@ -168,7 +168,7 @@ export function getGroupSubmissions(groupId: string): Promise<ModelWithSubmissio
 }
 
 export function getSubmissionFileUrl(submissionId: string): string {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('modeling_token');
   // Add .png extension so JSmol can detect the file type from the URL
   return `${API_BASE}/submissions/file/${submissionId}.png?token=${token}`;
 }
@@ -192,7 +192,7 @@ export function getGroupLiterature(groupId: string): Promise<Literature[]> {
 }
 
 export function getLiteratureFileUrl(id: string): string {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('modeling_token');
   return `${API_BASE}/literature/file/${id}?token=${token}`;
 }
 
@@ -205,7 +205,7 @@ export function getAllPresentations(): Promise<Presentation[]> {
 }
 
 export function getPresentationFileUrl(id: string): string {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('modeling_token');
   return `${API_BASE}/presentations/file/${id}?token=${token}`;
 }
 

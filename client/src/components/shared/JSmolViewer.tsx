@@ -182,7 +182,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     hasReceivedInitialSyncRef.current = false
     setPeerCount(1)
 
-    const socket = io({ path: '/modeling/socket.io/', auth: { token: localStorage.getItem('token') ?? '' } })
+    const socket = io({ path: '/modeling/socket.io/', auth: { token: localStorage.getItem('modeling_token') ?? '' } })
     socketRef.current = socket
     socket.emit('join-group', syncRoomId)
 

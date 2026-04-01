@@ -1,7 +1,7 @@
 const API_BASE = '/modeling/api/admin';
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('modeling_token');
 
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
@@ -291,7 +291,7 @@ export function deleteApplication(id: string): Promise<{ success: boolean }> {
 }
 
 export function getApplicationFileUrl(id: string): string {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('modeling_token');
   return `/modeling/api/admin/applications/${id}/file?token=${token}`;
 }
 
@@ -330,7 +330,7 @@ export function getViewerSessions(page = 1, limit = 20): Promise<PaginatedRespon
 }
 
 export async function downloadArchive(): Promise<void> {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('modeling_token');
   const response = await fetch(`${API_BASE}/nuclear-reset/archive`, {
     headers: {
       'Authorization': `Bearer ${token}`

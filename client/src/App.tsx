@@ -20,6 +20,24 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) {
+    // If a token exists but user is null, the server was likely temporarily
+    // unavailable when we tried to verify it. Show a reconnect prompt instead
+    // of the login form so the user knows to retry rather than re-enter credentials.
+    if (localStorage.getItem('modeling_token')) {
+      return (
+        <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-gray-600 text-lg mb-4">Could not connect to the server.</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )
+    }
     return <Navigate to="/login" replace />
   }
 
@@ -38,6 +56,21 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   }
 
   if (!user) {
+    if (localStorage.getItem('modeling_token')) {
+      return (
+        <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-gray-600 text-lg mb-4">Could not connect to the server.</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )
+    }
     return <Navigate to="/login" replace />
   }
 
