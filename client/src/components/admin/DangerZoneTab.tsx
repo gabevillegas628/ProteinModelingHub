@@ -86,7 +86,7 @@ export default function DangerZoneTab() {
           <div className="ml-3">
             <h3 className="text-lg font-medium text-red-800">Danger Zone</h3>
             <p className="mt-1 text-sm text-red-700">
-              The nuclear reset will permanently delete all student data, groups, submissions, messages, and literature.
+              The nuclear reset will permanently delete all student data, groups, submissions, messages, literature, and applications.
               Only admin accounts, instructor accounts, and model templates will be preserved.
             </p>
           </div>
@@ -146,6 +146,10 @@ export default function DangerZoneTab() {
                 <li className="flex justify-between">
                   <span className="text-red-700">Literature:</span>
                   <span className="font-semibold text-red-900">{preview.toDelete.literature}</span>
+                </li>
+                <li className="flex justify-between">
+                  <span className="text-red-700">Applications:</span>
+                  <span className="font-semibold text-red-900">{preview.toDelete.applications}</span>
                 </li>
                 <li className="flex justify-between border-t border-red-200 pt-2 mt-2">
                   <span className="text-red-700">Files on Disk:</span>
@@ -245,7 +249,7 @@ export default function DangerZoneTab() {
             </p>
             <p className="text-red-700 text-sm">
               Clicking the button below will permanently delete all groups, student accounts, submissions,
-              messages, and literature files from the database and server.
+              messages, literature files, and applications from the database and server.
             </p>
           </div>
 
@@ -303,6 +307,7 @@ export default function DangerZoneTab() {
               <li>Submissions: {result.deleted.submissions}</li>
               <li>Messages: {result.deleted.messages}</li>
               <li>Literature: {result.deleted.literature}</li>
+              <li>Applications: {result.deleted.applications}</li>
               <li>Files Removed: {result.deleted.filesRemoved}</li>
             </ul>
           </div>

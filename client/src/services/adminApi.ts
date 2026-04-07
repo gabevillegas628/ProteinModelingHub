@@ -206,6 +206,7 @@ export interface ResetPreview {
     submissions: number;
     messages: number;
     literature: number;
+    applications: number;
     filesOnDisk: number;
   };
   toPreserve: {
@@ -224,6 +225,7 @@ export interface ResetResult {
     submissions: number;
     messages: number;
     literature: number;
+    applications: number;
     filesRemoved: number;
   };
 }

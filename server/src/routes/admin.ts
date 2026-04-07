@@ -493,18 +493,20 @@ function sanitizeName(name: string): string {
 router.get('/nuclear-reset/preview', async (req: AuthRequest, res: Response) => {
   try {
     // Count what will be deleted
-    const [groups, students, submissions, messages, literature] = await Promise.all([
+    const [groups, students, submissions, messages, literature, applications] = await Promise.all([
       prisma.group.count(),
       prisma.user.count({ where: { role: 'STUDENT' } }),
       prisma.submission.count(),
       prisma.message.count(),
       prisma.literature.count(),
+      prisma.application.count(),
     ]);
 
     // Count files on disk
     const modelFiles = countFilesInDir(MODELS_DIR);
     const literatureFiles = countFilesInDir(LITERATURE_DIR);
-    const filesOnDisk = modelFiles + literatureFiles;
+    const applicationFiles = countFilesInDir(APPLICATIONS_DIR);
+    const filesOnDisk = modelFiles + literatureFiles + applicationFiles;
 
     // Count what will be preserved
     const [admins, instructors, modelTemplates] = await Promise.all([
@@ -528,6 +530,7 @@ router.get('/nuclear-reset/preview', async (req: AuthRequest, res: Response) => 
         submissions,
         messages,
         literature,
+        applications,
         filesOnDisk,
       },
       toPreserve: {
@@ -715,12 +718,13 @@ router.post('/nuclear-reset/execute', async (req: AuthRequest, res: Response) =>
     }
 
     // Count what we're about to delete (for response)
-    const [groupCount, studentCount, submissionCount, messageCount, literatureCount] = await Promise.all([
+    const [groupCount, studentCount, submissionCount, messageCount, literatureCount, applicationCount] = await Promise.all([
       prisma.group.count(),
       prisma.user.count({ where: { role: 'STUDENT' } }),
       prisma.submission.count(),
       prisma.message.count(),
       prisma.literature.count(),
+      prisma.application.count(),
     ]);
 
     // Execute reset in transaction
@@ -732,6 +736,9 @@ router.post('/nuclear-reset/execute', async (req: AuthRequest, res: Response) =>
       await tx.user.deleteMany({
         where: { role: 'STUDENT' },
       });
+
+      // Delete all applications
+      await tx.application.deleteMany({});
     });
 
     // Clean up files from disk
@@ -765,10 +772,24 @@ router.post('/nuclear-reset/execute', async (req: AuthRequest, res: Response) =>
       }
     }
 
+    if (fs.existsSync(APPLICATIONS_DIR)) {
+      const appFiles = fs.readdirSync(APPLICATIONS_DIR);
+      for (const file of appFiles) {
+        if (!file.startsWith('.')) {
+          try {
+            fs.unlinkSync(path.join(APPLICATIONS_DIR, file));
+            filesRemoved++;
+          } catch (err) {
+            console.error(`Failed to delete application file ${file}:`, err);
+          }
+        }
+      }
+    }
+
     // Clear the confirmation code
     confirmationCodes.delete(userId);
 
-    console.log(`Nuclear reset executed by user ${userId}. Deleted: ${groupCount} groups, ${studentCount} students, ${submissionCount} submissions, ${messageCount} messages, ${literatureCount} literature, ${filesRemoved} files.`);
+    console.log(`Nuclear reset executed by user ${userId}. Deleted: ${groupCount} groups, ${studentCount} students, ${submissionCount} submissions, ${messageCount} messages, ${literatureCount} literature, ${applicationCount} applications, ${filesRemoved} files.`);
 
     res.json({
       success: true,
@@ -778,6 +799,7 @@ router.post('/nuclear-reset/execute', async (req: AuthRequest, res: Response) =>
         submissions: submissionCount,
         messages: messageCount,
         literature: literatureCount,
+        applications: applicationCount,
         filesRemoved,
       },
     });

@@ -1,10 +1,13 @@
 import { useState, useEffect, useMemo } from 'react'
 import * as instructorApi from '../../services/instructorApi'
+import { useAuth } from '../../context/AuthContext'
 
 type SortCol = 'title' | 'group' | 'uploadedBy' | 'date' | 'size' | 'slides'
 type SortDir = 'asc' | 'desc'
+type SummarySortCol = 'name' | 'count' | 'latest'
 
 export default function InstructorPresentationsTab() {
+  const { user } = useAuth()
   const [presentations, setPresentations] = useState<instructorApi.Presentation[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -13,6 +16,13 @@ export default function InstructorPresentationsTab() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [summaryOpen, setSummaryOpen] = useState(false)
+  const [groups, setGroups] = useState<instructorApi.Group[]>([])
+  const [groupsLoading, setGroupsLoading] = useState(false)
+  const [summarySortCol, setSummarySortCol] = useState<SummarySortCol>('count')
+  const [summarySortDir, setSummarySortDir] = useState<SortDir>('asc')
+  const [threshold, setThreshold] = useState(1)
+  const [emailLoading, setEmailLoading] = useState(false)
 
   useEffect(() => {
     loadPresentations()
@@ -122,6 +132,55 @@ export default function InstructorPresentationsTab() {
     })
   }
 
+  const openSummary = async () => {
+    setSummaryOpen(true)
+    if (groups.length === 0) {
+      setGroupsLoading(true)
+      try {
+        setGroups(await instructorApi.getGroups())
+      } finally {
+        setGroupsLoading(false)
+      }
+    }
+  }
+
+  const emailMissingGroups = async () => {
+    const missingGroups = summaryRows.filter(r => r.count < threshold)
+    if (missingGroups.length === 0) return
+
+    setEmailLoading(true)
+    try {
+      const details = await Promise.all(
+        missingGroups.map(r => {
+          const group = groups.find(g => g.name === r.name)
+          return group ? instructorApi.getGroup(group.id) : null
+        })
+      )
+      const emails = Array.from(new Set(
+        details.flatMap(d => d?.members
+          .filter(m => m.user.role === 'STUDENT')
+          .map(m => m.user.email) ?? []
+        )
+      ))
+      const subject = encodeURIComponent('Presentation submission reminder')
+      const body = encodeURIComponent(
+        `Hi,\n\nYour group has not uploaded your Protein Modeling presentation yet. Please do so immediately so that we are prepared for our next meeting.\n\nAs a reminder, to upload your presentation, visit the course website and navigate to the presentations section.`
+      )
+      window.location.href = `mailto:${user?.email ?? ''}?bcc=${emails.join(',')}&subject=${subject}&body=${body}`
+    } finally {
+      setEmailLoading(false)
+    }
+  }
+
+  const handleSummarySort = (col: SummarySortCol) => {
+    if (summarySortCol === col) {
+      setSummarySortDir(d => d === 'asc' ? 'desc' : 'asc')
+    } else {
+      setSummarySortCol(col)
+      setSummarySortDir(col === 'count' ? 'asc' : 'asc')
+    }
+  }
+
   const clearFilters = () => {
     setDateFrom('')
     setDateTo('')
@@ -170,6 +229,74 @@ export default function InstructorPresentationsTab() {
     >
       {label}
       <SortIcon col={col} />
+    </button>
+  )
+
+  // Build per-group summary rows, merging all known groups with presentation counts
+  const summaryRows = useMemo(() => {
+    const countMap = new Map<string, { count: number; latest: string | null; name: string }>()
+
+    // Seed with all known groups (including those with 0 submissions)
+    groups.forEach(g => {
+      countMap.set(g.id, { count: 0, latest: null, name: g.name })
+    })
+
+    // Tally from presentations (may include groups not yet in `groups` if modal never opened)
+    presentations.forEach(p => {
+      const existing = countMap.get(p.groupId)
+      if (existing) {
+        existing.count++
+        if (!existing.latest || p.createdAt > existing.latest) existing.latest = p.createdAt
+      } else {
+        countMap.set(p.groupId, { count: 1, latest: p.createdAt, name: p.group.name })
+      }
+    })
+
+    const rows = Array.from(countMap.values())
+    rows.sort((a, b) => {
+      let cmp = 0
+      if (summarySortCol === 'name') cmp = a.name.localeCompare(b.name)
+      else if (summarySortCol === 'count') cmp = a.count - b.count
+      else {
+        // latest: nulls (never submitted) always sort to top regardless of direction
+        if (!a.latest && !b.latest) cmp = 0
+        else if (!a.latest) return -1
+        else if (!b.latest) return 1
+        else cmp = a.latest.localeCompare(b.latest)
+      }
+      return summarySortDir === 'asc' ? cmp : -cmp
+    })
+    return rows
+  }, [groups, presentations, summarySortCol, summarySortDir])
+
+  const SummarySortIcon = ({ col }: { col: SummarySortCol }) => {
+    if (summarySortCol !== col) {
+      return (
+        <svg className="w-3 h-3 text-gray-300 ml-1 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4M17 8v12m0 0l4-4m-4 4l-4-4" />
+        </svg>
+      )
+    }
+    return summarySortDir === 'asc' ? (
+      <svg className="w-3 h-3 text-blue-600 ml-1 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+      </svg>
+    ) : (
+      <svg className="w-3 h-3 text-blue-600 ml-1 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+      </svg>
+    )
+  }
+
+  const SummaryColHeader = ({ col, label }: { col: SummarySortCol; label: string }) => (
+    <button
+      onClick={() => handleSummarySort(col)}
+      className={`flex items-center text-xs font-medium uppercase tracking-wider hover:text-gray-800 transition-colors ${
+        summarySortCol === col ? 'text-blue-600' : 'text-gray-500'
+      }`}
+    >
+      {label}
+      <SummarySortIcon col={col} />
     </button>
   )
 
@@ -230,6 +357,16 @@ export default function InstructorPresentationsTab() {
         )}
 
         <div className="flex-1" />
+
+        <button
+          onClick={openSummary}
+          className="flex items-center gap-2 border border-gray-300 text-gray-700 px-4 py-1.5 rounded-md hover:bg-gray-50 transition-colors text-sm font-medium"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+          Group summary
+        </button>
 
         {selectedCount > 0 && (
           <button
@@ -312,6 +449,93 @@ export default function InstructorPresentationsTab() {
                 </a>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Group Summary Modal */}
+      {summaryOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/40" onClick={() => setSummaryOpen(false)} />
+          <div className="relative bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 max-h-[80vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b">
+              <div>
+                <h3 className="text-base font-semibold text-gray-800">Group submission summary</h3>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {summaryRows.filter(r => r.count < threshold).length} of {summaryRows.length} groups below threshold
+                </p>
+              </div>
+              <button
+                onClick={() => setSummaryOpen(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Threshold + email action bar */}
+            <div className="flex items-center gap-3 px-5 py-3 border-b bg-gray-50">
+              <label className="text-sm text-gray-600 whitespace-nowrap">Expected submissions:</label>
+              <input
+                type="number"
+                min={1}
+                value={threshold}
+                onChange={e => setThreshold(Math.max(1, parseInt(e.target.value) || 1))}
+                className="w-16 px-2 py-1 border border-gray-300 rounded-md text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <div className="flex-1" />
+              <button
+                onClick={emailMissingGroups}
+                disabled={emailLoading || summaryRows.filter(r => r.count < threshold).length === 0}
+                className="flex items-center gap-2 bg-blue-600 text-white px-3 py-1.5 rounded-md hover:bg-blue-700 transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {emailLoading ? (
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                  </svg>
+                ) : (
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                )}
+                Email missing ({summaryRows.filter(r => r.count < threshold).length})
+              </button>
+            </div>
+
+            {/* Table */}
+            <div className="overflow-y-auto flex-1">
+              {groupsLoading ? (
+                <div className="p-6 text-center text-gray-500 text-sm">Loading groups...</div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-[1fr_6rem_9rem] gap-4 px-5 py-2.5 bg-gray-50 border-b sticky top-0">
+                    <SummaryColHeader col="name" label="Group" />
+                    <SummaryColHeader col="count" label="Submissions" />
+                    <SummaryColHeader col="latest" label="Latest upload" />
+                  </div>
+                  <div className="divide-y divide-gray-100">
+                    {summaryRows.map(row => (
+                      <div key={row.name} className={`grid grid-cols-[1fr_6rem_9rem] gap-4 px-5 py-2.5 items-center ${row.count < threshold ? 'bg-red-50/40' : ''}`}>
+                        <span className="text-sm text-gray-800 truncate">{row.name}</span>
+                        <span>
+                          {row.count < threshold
+                            ? <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-700">{row.count === 0 ? 'None' : row.count}</span>
+                            : <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">{row.count}</span>
+                          }
+                        </span>
+                        <span className="text-sm text-gray-500">
+                          {row.latest ? formatDate(row.latest) : '—'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       )}
