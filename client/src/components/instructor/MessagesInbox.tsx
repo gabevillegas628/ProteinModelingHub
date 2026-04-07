@@ -93,7 +93,7 @@ export default function MessagesInbox({ onUnreadCountChange }: Props) {
                   <div className="flex items-center gap-2 shrink-0">
                     <span className="text-xs text-gray-400">{formatTime(thread.latestMessage.createdAt)}</span>
                     {hasUnread && (
-                      <span className="bg-blue-600 text-white text-xs font-medium px-2 py-0.5 rounded-full min-w-[1.25rem] text-center">
+                      <span className="bg-blue-600 text-white text-xs font-medium px-2 py-0.5 rounded-full min-w-5 text-center">
                         {thread.unreadCount}
                       </span>
                     )}
