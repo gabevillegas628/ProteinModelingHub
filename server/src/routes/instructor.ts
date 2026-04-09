@@ -336,7 +336,7 @@ router.get('/presentations/all', async (req: AuthRequest, res: Response) => {
           select: { id: true, firstName: true, lastName: true }
         },
         group: {
-          select: { id: true, name: true }
+          select: { id: true, name: true, proteinPdbId: true, schoolName: true }
         }
       }
     });

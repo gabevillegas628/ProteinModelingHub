@@ -124,7 +124,9 @@ export default function InstructorPresentationsTab() {
       setTimeout(() => {
         const a = document.createElement('a')
         a.href = instructorApi.getPresentationFileUrl(p.id)
-        a.download = p.fileName
+        const ext = p.fileName.includes('.') ? p.fileName.slice(p.fileName.lastIndexOf('.')) : ''
+        const school = p.group.schoolName ?? p.group.name
+        a.download = `${school}-${p.group.proteinPdbId}${ext}`
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)

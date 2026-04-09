@@ -126,6 +126,8 @@ export interface Presentation {
   group: {
     id: string;
     name: string;
+    proteinPdbId: string;
+    schoolName: string | null;
   };
 }
 
