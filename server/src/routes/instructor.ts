@@ -368,8 +368,11 @@ router.get('/presentations/file/:id', async (req: AuthRequest, res: Response) =>
       return;
     }
 
+    const filename = typeof req.query.filename === 'string' && req.query.filename
+      ? req.query.filename
+      : presentation.fileName;
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.presentationml.presentation');
-    res.setHeader('Content-Disposition', `attachment; filename="${presentation.fileName}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.sendFile(filePath);
   } catch (error) {
     console.error('Error fetching presentation file:', error);

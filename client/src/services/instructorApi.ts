@@ -206,9 +206,10 @@ export function getAllPresentations(): Promise<Presentation[]> {
   return request('/presentations/all');
 }
 
-export function getPresentationFileUrl(id: string): string {
+export function getPresentationFileUrl(id: string, filename?: string): string {
   const token = localStorage.getItem('modeling_token');
-  return `${API_BASE}/presentations/file/${id}?token=${token}`;
+  const base = `${API_BASE}/presentations/file/${id}?token=${token}`;
+  return filename ? `${base}&filename=${encodeURIComponent(filename)}` : base;
 }
 
 export interface MemberActivity {

@@ -122,11 +122,12 @@ export default function InstructorPresentationsTab() {
     const toDownload = filtered.filter(p => selected.has(p.id))
     toDownload.forEach((p, i) => {
       setTimeout(() => {
-        const a = document.createElement('a')
-        a.href = instructorApi.getPresentationFileUrl(p.id)
         const ext = p.fileName.includes('.') ? p.fileName.slice(p.fileName.lastIndexOf('.')) : ''
         const school = p.group.schoolName ?? p.group.name
-        a.download = `${school}-${p.group.proteinPdbId}${ext}`
+        const filename = `${school}-${p.group.proteinPdbId}${ext}`
+        const a = document.createElement('a')
+        a.href = instructorApi.getPresentationFileUrl(p.id, filename)
+        a.download = filename
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
