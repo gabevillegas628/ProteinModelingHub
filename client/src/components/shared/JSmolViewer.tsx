@@ -1297,7 +1297,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
               </svg>
             </div>
             <div>
-              <h4 className="font-semibold text-gray-800">Submitting Model</h4>
+              <h4 className="font-semibold text-gray-800">Saving Model</h4>
               <p className="text-sm text-gray-500">{submitProgress.status}</p>
             </div>
           </div>
