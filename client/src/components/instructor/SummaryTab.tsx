@@ -6,6 +6,7 @@ import * as instructorApi from '../../services/instructorApi'
 
 interface Props {
   groups: instructorApi.Group[]
+  onSelectGroup: (groupId: string) => void
 }
 
 function timeAgo(dateStr: string): string {
@@ -53,10 +54,13 @@ function SparkChart({ data, memberIds, title, valueFormatter, memberNames }: Spa
         <LineChart data={data} margin={{ top: 4, right: 8, bottom: 0, left: 4 }}>
           <XAxis
             dataKey="date"
-            tick={{ fontSize: 13, fill: '#9ca3af' }}
+            tick={{ fontSize: 11, fill: '#9ca3af' }}
             tickLine={false}
             axisLine={{ stroke: '#4b5563' }}
             interval={tickInterval}
+            angle={-45}
+            textAnchor="end"
+            height={36}
           />
           <YAxis
             tick={{ fontSize: 13, fill: '#9ca3af' }}
@@ -165,7 +169,7 @@ const STATUS_LABELS: Record<string, string> = {
   DRAFT: 'Draft',
 }
 
-export default function SummaryTab({ groups }: Props) {
+export default function SummaryTab({ groups, onSelectGroup }: Props) {
   const [submissionMap, setSubmissionMap] = useState<Record<string, instructorApi.ModelWithSubmission[]>>({})
   const [loadingSubmissions, setLoadingSubmissions] = useState(true)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
@@ -245,17 +249,25 @@ export default function SummaryTab({ groups }: Props) {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <h2 className="text-xl font-semibold text-gray-800">
-        Overview — All Groups ({groups.length})
-      </h2>
-
+    <div className="p-6">
+      <div className="flex items-center gap-3 mb-6">
+        <h2 className="text-xl font-semibold text-gray-800">
+          Overview — All Groups ({groups.length})
+        </h2>
+        <button
+          onClick={() => {
+            const allExpanded = collapsedGroups.size === 0
+            setCollapsedGroups(allExpanded ? new Set(groups.map(g => g.id)) : new Set())
+          }}
+          className="text-xs text-gray-500 border border-gray-300 rounded px-2 py-1 hover:bg-gray-100 transition-colors"
+        >
+          {collapsedGroups.size === 0 ? 'Collapse all' : 'Expand all'}
+        </button>
+      </div>
+      <div className="grid grid-cols-2 gap-6 items-start">
       {groups.map(group => {
         const models = submissionMap[group.id] ?? []
         const total = group.activeTemplateCount
-        const pct = total > 0 ? Math.round((group.submissionCount / total) * 100) : 0
-        const approvedCount = models.filter(m => m.submission?.status === 'APPROVED').length
-        const allApproved = !loadingSubmissions && group.submissionCount === total && total > 0 && approvedCount === total
         const isCollapsed = collapsedGroups.has(group.id)
 
         const timestamps = models.flatMap(m => m.submission ? [m.submission.updatedAt] : [])
@@ -306,18 +318,26 @@ export default function SummaryTab({ groups }: Props) {
                 </div>
               </div>
               {total > 0 && (
-                <div className="mt-3 flex items-center gap-3 pl-6">
-                  <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all ${allApproved ? 'bg-green-500' : 'bg-blue-500'}`}
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                  <span className="text-sm text-gray-600 whitespace-nowrap">
-                    {group.submissionCount} of {total} submitted
-                    {!loadingSubmissions && allApproved && ' · All approved ✓'}
-                    {!loadingSubmissions && !allApproved && approvedCount > 0 && ` · ${approvedCount} approved`}
-                  </span>
+                <div className="mt-2 pl-6 flex items-center gap-2 flex-wrap">
+                  {loadingSubmissions ? (
+                    <span className="text-xs text-gray-400">Loading…</span>
+                  ) : (() => {
+                    const noSub = models.filter(m => !m.submission).length
+                    const draft = models.filter(m => m.submission?.status === 'DRAFT').length
+                    const submitted = models.filter(m => m.submission?.status === 'SUBMITTED' || m.submission?.status === 'NEEDS_REVISION').length
+                    const approved = models.filter(m => m.submission?.status === 'APPROVED').length
+                    const pills: { label: string; count: number; className: string }[] = [
+                      { label: 'No submission', count: noSub, className: 'bg-gray-100 text-gray-500' },
+                      { label: 'Draft', count: draft, className: 'bg-gray-200 text-gray-600' },
+                      { label: 'Submitted', count: submitted, className: 'bg-blue-100 text-blue-700' },
+                      { label: 'Approved', count: approved, className: 'bg-green-100 text-green-700' },
+                    ]
+                    return pills.filter(p => p.count > 0).map(p => (
+                      <span key={p.label} className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.className}`}>
+                        {p.count} {p.label}
+                      </span>
+                    ))
+                  })()}
                 </div>
               )}
             </button>
@@ -359,7 +379,11 @@ export default function SummaryTab({ groups }: Props) {
                     <table className="w-full text-sm">
                       <tbody>
                         {models.map(model => (
-                          <tr key={model.id} className="border-b border-gray-50 last:border-0">
+                          <tr
+                            key={model.id}
+                            className="border-b border-gray-50 last:border-0 cursor-pointer hover:bg-blue-50 transition-colors"
+                            onClick={() => onSelectGroup(group.id)}
+                          >
                             <td className="px-5 py-2.5 font-medium text-gray-700 w-2/5">{model.name}</td>
                             <td className="px-5 py-2.5">
                               {model.submission ? (
@@ -452,6 +476,7 @@ export default function SummaryTab({ groups }: Props) {
           </div>
         )
       })}
+      </div>
     </div>
   )
 }

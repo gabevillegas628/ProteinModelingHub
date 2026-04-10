@@ -179,7 +179,7 @@ export default function Dashboard() {
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <div className="font-medium text-gray-800 truncate">{group.name}</div>
+                    <div className="font-medium text-gray-800 truncate">{group.name.split(' - ')[0]}</div>
                     {group.unreadMessageCount > 0 && (
                       <span className="bg-red-500 text-white text-xs font-medium px-2 py-0.5 rounded-full min-w-5 text-center">
                         {group.unreadMessageCount}
@@ -264,7 +264,10 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="flex-1 overflow-y-auto">
-              <InstructorSummaryTab groups={groups} />
+              <InstructorSummaryTab
+                groups={groups}
+                onSelectGroup={(id) => { setSelectedGroupId(id); setActiveTab('submissions') }}
+              />
             </div>
           )}
         </main>
