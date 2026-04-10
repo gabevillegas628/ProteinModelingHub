@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { SubmissionStatus } from '@prisma/client';
@@ -16,6 +17,30 @@ const UPLOAD_BASE = path.join(process.cwd(), 'uploads');
 const MODELS_DIR = path.join(UPLOAD_BASE, 'models');
 const LITERATURE_DIR = path.join(UPLOAD_BASE, 'literature');
 const PRESENTATIONS_DIR = path.join(UPLOAD_BASE, 'presentations');
+
+// Configure multer for literature uploads (PDF files)
+const literatureStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, LITERATURE_DIR);
+  },
+  filename: (_req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const literatureUpload = multer({
+  storage: literatureStorage,
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext === '.pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF files are allowed for literature'));
+    }
+  },
+  limits: { fileSize: 50 * 1024 * 1024 } // 50MB limit
+});
 
 // ============================================
 // GROUPS
@@ -319,6 +344,79 @@ router.get('/literature/file/:id', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Error fetching literature file:', error);
     res.status(500).json({ error: 'Failed to fetch literature file' });
+  }
+});
+
+// Upload literature to a group
+router.post('/groups/:groupId/literature', literatureUpload.single('file'), async (req: AuthRequest, res: Response) => {
+  try {
+    const groupId = req.params.groupId as string;
+    const file = req.file;
+    const { title, description } = req.body;
+
+    if (!file) {
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+
+    if (!title) {
+      fs.unlinkSync(file.path);
+      res.status(400).json({ error: 'Title is required' });
+      return;
+    }
+
+    const group = await prisma.group.findUnique({ where: { id: groupId } });
+    if (!group) {
+      fs.unlinkSync(file.path);
+      res.status(404).json({ error: 'Group not found' });
+      return;
+    }
+
+    const literature = await prisma.literature.create({
+      data: {
+        groupId,
+        uploadedById: req.user!.userId,
+        title,
+        description,
+        fileName: file.originalname,
+        filePath: file.filename,
+        fileSize: file.size
+      },
+      include: {
+        uploadedBy: {
+          select: { id: true, firstName: true, lastName: true }
+        }
+      }
+    });
+
+    res.status(201).json(literature);
+  } catch (error) {
+    console.error('Error uploading literature:', error);
+    res.status(500).json({ error: 'Failed to upload literature' });
+  }
+});
+
+// Delete literature
+router.delete('/literature/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.params.id as string;
+
+    const literature = await prisma.literature.findUnique({ where: { id } });
+    if (!literature) {
+      res.status(404).json({ error: 'Literature not found' });
+      return;
+    }
+
+    const filePath = path.join(LITERATURE_DIR, literature.filePath);
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+
+    await prisma.literature.delete({ where: { id } });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting literature:', error);
+    res.status(500).json({ error: 'Failed to delete literature' });
   }
 });
 

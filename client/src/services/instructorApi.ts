@@ -198,6 +198,36 @@ export function getLiteratureFileUrl(id: string): string {
   return `${API_BASE}/literature/file/${id}?token=${token}`;
 }
 
+export async function uploadLiterature(
+  groupId: string,
+  file: File,
+  title: string,
+  description?: string
+): Promise<Literature> {
+  const token = localStorage.getItem('modeling_token');
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('title', title);
+  if (description) formData.append('description', description);
+
+  const response = await fetch(`${API_BASE}/groups/${groupId}/literature`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Upload failed' }));
+    throw new Error(error.error || 'Upload failed');
+  }
+
+  return response.json();
+}
+
+export function deleteLiterature(id: string): Promise<{ success: boolean }> {
+  return request(`/literature/${id}`, { method: 'DELETE' });
+}
+
 // ============================================
 // Presentations
 // ============================================
