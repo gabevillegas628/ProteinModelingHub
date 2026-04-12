@@ -33,6 +33,7 @@ export default function ModelsTab() {
   const [uploading, setUploading] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState<string | null>(null)
   const [withdrawing, setWithdrawing] = useState<string | null>(null)
+  const [resetting, setResetting] = useState<string | null>(null)
   const [viewer, setViewer] = useState<ViewerState>({ isOpen: false, fileUrl: '', modelName: '' })
   const [comments, setComments] = useState<CommentsState>({})
   const [discussionModal, setDiscussionModal] = useState<{ submissionId: string; modelName: string } | null>(null)
@@ -77,6 +78,30 @@ export default function ModelsTab() {
       setError(err instanceof Error ? err.message : 'Failed to submit model')
     } finally {
       setSubmitting(null)
+    }
+  }
+
+  const handleStartOver = async (model: studentApi.ModelWithSubmission) => {
+    const status = model.submission?.status
+    if (!status || status === 'DRAFT' || status === 'NEEDS_REVISION') {
+      setNewPickerOpen(model.id)
+      return
+    }
+
+    const msg = status === 'SUBMITTED'
+      ? 'Starting over will withdraw your submission from review and reset it to a draft. Continue?'
+      : 'Starting over will reset your approved model back to a draft. Continue?'
+    if (!window.confirm(msg)) return
+
+    try {
+      setResetting(model.id)
+      await studentApi.resetModel(model.submission!.id)
+      await loadModels()
+      setNewPickerOpen(model.id)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to reset model')
+    } finally {
+      setResetting(null)
     }
   }
 
@@ -395,30 +420,49 @@ export default function ModelsTab() {
                   )}
                 </div>
                 <div className="flex items-center gap-2 ml-4">
+                  {/* Upload — only for editable states */}
                   {(!model.submission || model.submission.status === 'DRAFT' || model.submission.status === 'NEEDS_REVISION') && (
-                    <>
-                      <button
-                        onClick={() => handleUploadClick(model.id)}
-                        disabled={uploading === model.id}
-                        className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
-                      >
-                        {uploading === model.id ? 'Uploading...' : model.submission ? 'Upload PNGJ' : 'Upload'}
-                      </button>
-                      <button
-                        onClick={() => setNewPickerOpen(newPickerOpen === model.id ? null : model.id)}
-                        className={`flex items-center gap-1 px-3 py-1.5 text-sm rounded-md transition-colors font-medium ${
-                          newPickerOpen === model.id ? 'bg-indigo-700 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                        }`}
-                      >
-                        {!newPickerOpen || newPickerOpen !== model.id ? (
-                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                          </svg>
-                        ) : null}
-                        {newPickerOpen === model.id ? 'Cancel' : 'New'}
-                      </button>
-                    </>
+                    <button
+                      onClick={() => handleUploadClick(model.id)}
+                      disabled={uploading === model.id}
+                      className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:bg-gray-400 transition-colors"
+                    >
+                      {uploading === model.id ? 'Uploading...' : model.submission ? 'Upload PNG' : 'Upload'}
+                    </button>
                   )}
+
+                  {/* New (no submission) or Start Over (has submission) */}
+                  {!model.submission ? (
+                    <button
+                      onClick={() => setNewPickerOpen(newPickerOpen === model.id ? null : model.id)}
+                      className={`flex items-center gap-1 px-3 py-1.5 text-sm rounded-md transition-colors font-medium ${
+                        newPickerOpen === model.id ? 'bg-indigo-700 text-white' : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                      }`}
+                    >
+                      {newPickerOpen !== model.id && (
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                      )}
+                      {newPickerOpen === model.id ? 'Cancel' : 'New'}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => newPickerOpen === model.id ? setNewPickerOpen(null) : handleStartOver(model)}
+                      disabled={resetting === model.id}
+                      className={`flex items-center gap-1 px-3 py-1.5 text-sm rounded-md transition-colors font-medium ${
+                        newPickerOpen === model.id
+                          ? 'bg-gray-500 text-white hover:bg-gray-600'
+                          : model.submission.status === 'SUBMITTED' || model.submission.status === 'APPROVED'
+                            ? 'bg-amber-500 text-white hover:bg-amber-600 disabled:bg-gray-300'
+                            : 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:bg-gray-300'
+                      }`}
+                    >
+                      {newPickerOpen === model.id ? 'Cancel' : resetting === model.id ? 'Resetting...' : 'Start Over'}
+                    </button>
+                  )}
+
+                  {/* Submit / Resubmit */}
                   {model.submission?.status === 'DRAFT' && (
                     <button
                       onClick={() => handleSubmitForReview(model.id)}
@@ -437,6 +481,8 @@ export default function ModelsTab() {
                       {submitting === model.id ? 'Submitting...' : 'Resubmit for Review'}
                     </button>
                   )}
+
+                  {/* Withdraw — stays as subtle text link */}
                   {model.submission?.status === 'SUBMITTED' && (
                     <button
                       onClick={() => handleWithdraw(model.submission!.id)}

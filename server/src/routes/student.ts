@@ -491,6 +491,42 @@ router.post('/models/:submissionId/withdraw', async (req: AuthRequest, res: Resp
   }
 });
 
+// Reset a submission back to DRAFT from any locked status (SUBMITTED or APPROVED)
+router.post('/models/:submissionId/reset', async (req: AuthRequest, res: Response) => {
+  try {
+    const submissionId = req.params.submissionId as string;
+    const group = await getStudentGroup(req.user!.userId);
+    if (!group) {
+      res.status(404).json({ error: 'You are not assigned to a group' });
+      return;
+    }
+
+    const submission = await prisma.submission.findUnique({
+      where: { id: submissionId }
+    });
+
+    if (!submission || submission.groupId !== group.id) {
+      res.status(404).json({ error: 'Submission not found' });
+      return;
+    }
+
+    if (submission.status === 'DRAFT') {
+      res.status(400).json({ error: 'Submission is already a draft' });
+      return;
+    }
+
+    const updated = await prisma.submission.update({
+      where: { id: submissionId },
+      data: { status: 'DRAFT', feedback: null, updatedAt: new Date() }
+    });
+
+    res.json(updated);
+  } catch (error) {
+    console.error('Error resetting model:', error);
+    res.status(500).json({ error: 'Failed to reset model' });
+  }
+});
+
 // ============================================
 // LITERATURE
 // ============================================

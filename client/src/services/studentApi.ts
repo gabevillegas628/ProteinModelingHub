@@ -137,6 +137,10 @@ export function withdrawModel(submissionId: string): Promise<Submission> {
   return request(`/models/${submissionId}/withdraw`, { method: 'POST' });
 }
 
+export function resetModel(submissionId: string): Promise<Submission> {
+  return request(`/models/${submissionId}/reset`, { method: 'POST' });
+}
+
 export function getModelFileUrl(submissionId: string): string {
   const token = localStorage.getItem('modeling_token');
   // Add .png extension so JSmol can detect the file type from the URL
