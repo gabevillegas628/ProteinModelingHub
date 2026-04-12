@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import * as messageApi from '../../services/messageApi'
 import CommentThread from '../shared/CommentThread'
 import { useAuth } from '../../context/AuthContext'
@@ -14,27 +14,32 @@ export default function DiscussionTab({ groupId, onMessagesRead }: Props) {
   const [readStatuses, setReadStatuses] = useState<messageApi.ReadStatus[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-
-  useEffect(() => {
-    loadMessages()
-    // Poll for new messages every 10 seconds
-    const interval = setInterval(loadMessages, 10000)
-    return () => clearInterval(interval)
-  }, [groupId])
+  const hasLoadedRef = useRef(false)
 
   const loadMessages = useCallback(async () => {
     try {
-      setLoading(messages.length === 0)
+      if (!hasLoadedRef.current) {
+        setLoading(true)
+      }
       const response = await messageApi.getGroupMessages(groupId)
       setMessages(response.messages)
       setReadStatuses(response.readStatuses)
       setError('')
+      hasLoadedRef.current = true
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load messages')
     } finally {
       setLoading(false)
     }
-  }, [groupId, messages.length])
+  }, [groupId])
+
+  useEffect(() => {
+    hasLoadedRef.current = false
+    loadMessages()
+    // Poll for new messages every 10 seconds
+    const interval = setInterval(loadMessages, 10000)
+    return () => clearInterval(interval)
+  }, [groupId, loadMessages])
 
   const handlePost = async (content: string) => {
     await messageApi.postGroupMessage(groupId, content)
