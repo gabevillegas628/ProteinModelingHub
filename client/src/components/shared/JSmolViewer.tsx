@@ -394,6 +394,8 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
               window.Jmol.script(appletRef.current!, `
                 ${baseSettings}
                 ${loadCommand}
+                unitcell off;
+                set displaycellparameters false;
                 print "__init_done__";
               `)
 
@@ -512,6 +514,8 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
         load =${proteinPdbId};
         cartoon only;
         color structure;
+        unitcell off;
+        set displaycellparameters false;
       `)
       setDisplayStyle('cartoon')
       setColorScheme('structure')
@@ -1286,7 +1290,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
       document.body
     )}
 
-    {/* Submit Progress Modal - rendered via portal to escape JSmol's z-index stacking */}
+    {/* Save Progress Modal - rendered via portal to escape JSmol's z-index stacking */}
     {isSubmitting && createPortal(
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-10000">
         <div className="bg-white rounded-lg shadow-2xl p-6 w-80">
