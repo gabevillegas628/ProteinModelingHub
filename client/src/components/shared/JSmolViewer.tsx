@@ -264,7 +264,12 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
       const rawState = window.Jmol.getPropertyAsString(appletRef.current, 'stateInfo')
       if (!rawState) return
       if (!modelLoadedRef.current) {
-        if (rawState.length > 200) modelLoadedRef.current = true
+        if (rawState.length > 200) {
+          modelLoadedRef.current = true
+          // Suppress any unit cell that the PNGJ state script may have re-enabled
+          // after the initial load command ran.
+          window.Jmol.script(appletRef.current, 'unitcell off; set displaycellparameters false;')
+        }
         return // Always skip this cycle; emit starts on the next tick after detection
       }
 
