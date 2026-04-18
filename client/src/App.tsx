@@ -7,6 +7,7 @@ import Apply from './pages/Apply'
 import Dashboard from './pages/Dashboard'
 import StudentDashboard from './pages/StudentDashboard'
 import Admin from './pages/Admin'
+import StandaloneViewer from './pages/StandaloneViewer'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -132,6 +133,7 @@ function App() {
           </AdminRoute>
         }
       />
+      <Route path="/viewer" element={<StandaloneViewer />} />
       <Route path="/" element={<Navigate to={getDefaultRoute()} replace />} />
     </Routes>
   )
