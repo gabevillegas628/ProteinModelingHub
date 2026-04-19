@@ -156,6 +156,7 @@ export default function InboxThreadModal({
           fileUrl={instructorApi.getSubmissionFileUrl(submissionId!)}
           modelName={label}
           proteinPdbId={proteinPdbId}
+          submissionId={submissionId ?? undefined}
         />
       )}
     </>

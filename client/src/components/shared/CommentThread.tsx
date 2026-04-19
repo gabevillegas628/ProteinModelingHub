@@ -31,8 +31,10 @@ export default function CommentThread({
   const [postError, setPostError] = useState('')
   const messagesListRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
   const lastMarkedReadRef = useRef<string | null>(null)
   const shouldScrollRef = useRef(false)
+  const hasInitialScrolledRef = useRef(false)
 
   // Scroll to bottom within the messages container only (not the page)
   const scrollToBottom = useCallback(() => {
@@ -41,8 +43,13 @@ export default function CommentThread({
     }
   }, [])
 
-  // Auto-scroll only when user sends a message
+  // Scroll to bottom on initial load, and again after the user posts a message
   useEffect(() => {
+    if (messages.length > 0 && !hasInitialScrolledRef.current) {
+      hasInitialScrolledRef.current = true
+      scrollToBottom()
+      return
+    }
     if (shouldScrollRef.current) {
       scrollToBottom()
       shouldScrollRef.current = false
@@ -236,7 +243,7 @@ export default function CommentThread({
                     <span className="mx-1.5">·</span>
                     <span>{formatTime(message.createdAt)}</span>
                   </div>
-                  <div className="text-sm whitespace-pre-wrap break-all">
+                  <div className="text-sm whitespace-pre-wrap wrap-break-word">
                     {message.content}
                   </div>
                 </div>
@@ -253,14 +260,25 @@ export default function CommentThread({
       </div>
 
       {/* Input form */}
-      <form onSubmit={handleSubmit} className="flex gap-2 shrink-0">
-        <input
-          type="text"
+      <form onSubmit={handleSubmit} className="flex gap-2 items-end shrink-0">
+        <textarea
+          ref={textareaRef}
+          rows={1}
           value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
+          onChange={(e) => {
+            setNewMessage(e.target.value)
+            e.target.style.height = 'auto'
+            e.target.style.height = `${e.target.scrollHeight}px`
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+              e.preventDefault()
+              handleSubmit(e as unknown as React.FormEvent)
+            }
+          }}
           placeholder={placeholder}
           disabled={posting}
-          className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100"
+          className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-inset focus:ring-blue-500 focus:border-transparent disabled:bg-gray-100 resize-none overflow-hidden"
         />
         <button
           type="submit"

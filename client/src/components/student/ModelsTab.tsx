@@ -12,6 +12,7 @@ interface ViewerState {
   modelName: string
   proteinPdbId?: string
   templateId?: string
+  submissionId?: string
 }
 
 interface CommentsState {
@@ -173,7 +174,8 @@ export default function ModelsTab() {
       fileUrl: studentApi.getModelFileUrl(submissionId),
       modelName,
       proteinPdbId: data?.group.proteinPdbId,
-      templateId
+      templateId,
+      submissionId
     })
   }
 
@@ -619,6 +621,7 @@ export default function ModelsTab() {
         templateId={viewer.templateId}
         onSubmit={handleViewerSubmit}
         groupId={data?.group.id}
+        submissionId={viewer.submissionId}
       />
 
       {/* Discussion Modal */}

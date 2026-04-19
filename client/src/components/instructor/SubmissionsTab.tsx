@@ -17,6 +17,7 @@ interface ViewerState {
   modelName: string
   proteinPdbId?: string
   templateId?: string
+  submissionId?: string
 }
 
 interface CommentsState {
@@ -73,7 +74,8 @@ export default function SubmissionsTab({ groupId, proteinPdbId }: Props) {
       fileUrl: instructorApi.getSubmissionFileUrl(submissionId),
       modelName,
       proteinPdbId,
-      templateId
+      templateId,
+      submissionId
     })
   }
 
@@ -390,6 +392,7 @@ export default function SubmissionsTab({ groupId, proteinPdbId }: Props) {
         proteinPdbId={viewer.proteinPdbId}
         groupId={groupId}
         templateId={viewer.templateId}
+        submissionId={viewer.submissionId}
       />
 
       {/* Discussion Modal */}

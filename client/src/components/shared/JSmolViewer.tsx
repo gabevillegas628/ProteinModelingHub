@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom'
 import { io } from 'socket.io-client'
 import { useAuth } from '../../context/AuthContext'
 import * as viewerChatApi from '../../services/viewerChatApi'
+import * as messageApi from '../../services/messageApi'
+import CommentThread from './CommentThread'
 
 // Declare Jmol as a global variable (loaded from local files)
 declare global {
@@ -49,10 +51,40 @@ interface JSmolViewerProps {
   onSubmit?: (templateId: string, file: File) => Promise<void>;
   groupId?: string;
   dialogClassName?: string;
+  submissionId?: string;
 }
 
 type DisplayStyle = 'cartoon' | 'ribbon' | 'trace' | 'wireframe' | 'spacefill' | 'ball+stick';
 type ColorScheme = 'structure' | 'chain' | 'amino' | 'temperature' | 'group';
+
+// Generic drag hook used by all floating panels in this component.
+function useDraggable(initialX: number, initialY: number) {
+  const [pos, setPos] = useState({ x: initialX, y: initialY })
+  const dragRef = useRef({ active: false, startX: 0, startY: 0, startPosX: 0, startPosY: 0 })
+
+  useEffect(() => {
+    const onMove = (e: MouseEvent) => {
+      if (!dragRef.current.active) return
+      setPos({
+        x: dragRef.current.startPosX + (e.clientX - dragRef.current.startX),
+        y: dragRef.current.startPosY + (e.clientY - dragRef.current.startY),
+      })
+    }
+    const onUp = () => { dragRef.current.active = false }
+    document.addEventListener('mousemove', onMove)
+    document.addEventListener('mouseup', onUp)
+    return () => {
+      document.removeEventListener('mousemove', onMove)
+      document.removeEventListener('mouseup', onUp)
+    }
+  }, [])
+
+  const onMouseDown = (e: React.MouseEvent) => {
+    dragRef.current = { active: true, startX: e.clientX, startY: e.clientY, startPosX: pos.x, startPosY: pos.y }
+  }
+
+  return { pos, setPos, onMouseDown }
+}
 
 // Strip Jmol 'load ...' lines from a stateInfo script before broadcasting or applying it.
 // Jmol's stateInfo always includes the original load command; if a receiver re-runs it,
@@ -65,7 +97,7 @@ function stripLoadCommands(state: string): string {
     .join('\n')
 }
 
-export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, proteinPdbId, templateId, onSubmit, groupId, dialogClassName }: JSmolViewerProps) {
+export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, proteinPdbId, templateId, onSubmit, groupId, dialogClassName, submissionId }: JSmolViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const consoleRef = useRef<HTMLDivElement>(null)
   const consolePopoutRef = useRef<HTMLDivElement>(null)
@@ -73,7 +105,10 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   const consoleDivIdRef = useRef(`jsmolInfoDiv_${Math.random().toString(36).slice(2)}`)
   const consoleObserverRef = useRef<MutationObserver | null>(null)
   const suppressConsoleRef = useRef(true)
-  const consoleDragRef = useRef({ active: false, startX: 0, startY: 0, startPosX: 0, startPosY: 0 })
+  const chatDrag = useDraggable(window.innerWidth - 384 - 24, window.innerHeight - 480 - 24)
+  const feedbackDrag = useDraggable(window.innerWidth - 384 - (groupId && templateId ? 416 : 24), window.innerHeight - 480 - 24)
+  const helpDrag = useDraggable(24, Math.max(window.innerHeight - 560 - 24, 20))
+  const consoleDrag = useDraggable(window.innerWidth - 630, 20)
 
   const originalStateRef = useRef<{ stateCommands: string | null }>({ stateCommands: null })
   const [loading, setLoading] = useState(true)
@@ -90,7 +125,6 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   const [historyIndex, setHistoryIndex] = useState(-1)
   const [consoleLog, setConsoleLog] = useState<Array<{ type: 'command' | 'output' | 'error', text: string }>>([])
   const [consolePopout, setConsolePopout] = useState(false)
-  const [consolePos, setConsolePos] = useState({ x: 0, y: 0 })
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitProgress, setSubmitProgress] = useState({ percent: 0, status: '' })
   const [showResetConfirm, setShowResetConfirm] = useState(false)
@@ -134,6 +168,14 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
   const prevChatOpenRef = useRef(false)
   const prevMessageCountRef = useRef(0)
   const [newMsgCount, setNewMsgCount] = useState(0)
+
+  // Submission feedback comments state
+  const [commentsOpen, setCommentsOpen] = useState(false)
+  const [commentMessages, setCommentMessages] = useState<messageApi.Message[]>([])
+  const [commentLoading, setCommentLoading] = useState(false)
+  const [commentReadStatuses, setCommentReadStatuses] = useState<messageApi.ReadStatus[]>([])
+  const [commentUnread, setCommentUnread] = useState(0)
+  const commentsOpenRef = useRef(false)
 
   const CHAT_GROUP_THRESHOLD_MS = 5 * 60 * 1000
 
@@ -485,26 +527,6 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     }
   }, [consoleLog])
 
-  // Drag the popout console
-  useEffect(() => {
-    if (!consolePopout) return
-    const onMove = (e: MouseEvent) => {
-      if (!consoleDragRef.current.active) return
-      const dx = e.clientX - consoleDragRef.current.startX
-      const dy = e.clientY - consoleDragRef.current.startY
-      setConsolePos({
-        x: consoleDragRef.current.startPosX + dx,
-        y: consoleDragRef.current.startPosY + dy,
-      })
-    }
-    const onUp = () => { consoleDragRef.current.active = false }
-    document.addEventListener('mousemove', onMove)
-    document.addEventListener('mouseup', onUp)
-    return () => {
-      document.removeEventListener('mousemove', onMove)
-      document.removeEventListener('mouseup', onUp)
-    }
-  }, [consolePopout])
 
   const runScript = (script: string) => {
     if (appletRef.current && window.Jmol) {
@@ -799,6 +821,38 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     return () => clearInterval(interval)
   }, [groupId, templateId, isOpen, loadChat])
 
+  // Feedback comments: load and poll while viewer is open
+  const loadComments = useCallback(async () => {
+    if (!submissionId) return
+    try {
+      const { messages, unreadCount, readStatuses } = await messageApi.getSubmissionComments(submissionId)
+      setCommentMessages(messages)
+      setCommentReadStatuses(readStatuses)
+      if (!commentsOpenRef.current) setCommentUnread(unreadCount)
+    } catch {
+      // silent — don't disrupt the viewer for comment errors
+    }
+  }, [submissionId])
+
+  useEffect(() => {
+    if (!submissionId || !isOpen) return
+    setCommentLoading(true)
+    loadComments().finally(() => setCommentLoading(false))
+    const interval = setInterval(loadComments, 5000)
+    return () => clearInterval(interval)
+  }, [submissionId, isOpen, loadComments])
+
+  // Mark comments as read when the panel is open
+  useEffect(() => {
+    if (!commentsOpen || !submissionId || commentMessages.length === 0) return
+    const latest = commentMessages[commentMessages.length - 1]
+    setCommentUnread(0)
+    messageApi.markSubmissionRead(submissionId, latest.createdAt).catch(() => {})
+  }, [commentsOpen, commentMessages, submissionId])
+
+  // Keep commentsOpenRef in sync
+  useEffect(() => { commentsOpenRef.current = commentsOpen }, [commentsOpen])
+
   // Chat: auto-scroll to bottom when panel opens or new messages arrive while open
   useEffect(() => {
     if (chatOpen) {
@@ -893,6 +947,27 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
               >
                 <span className={`w-2 h-2 rounded-full ${syncEnabled ? 'bg-green-500' : 'bg-gray-400'}`} />
                 {syncEnabled ? 'Synced' : 'Sync Off'}
+              </button>
+            )}
+            {submissionId && (
+              <button
+                onClick={() => setCommentsOpen(o => !o)}
+                className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded text-sm font-medium transition-colors ${
+                  commentsOpen
+                    ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+                title={commentsOpen ? 'Close feedback' : 'Open feedback comments'}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z" />
+                </svg>
+                Feedback
+                {commentUnread > 0 && !commentsOpen && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+                    {commentUnread > 9 ? '9+' : commentUnread}
+                  </span>
+                )}
               </button>
             )}
             {groupId && templateId && (
@@ -1146,7 +1221,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
                 <button
                   type="button"
                   onClick={() => {
-                    setConsolePos({ x: window.innerWidth - 630, y: 20 })
+                    consoleDrag.setPos({ x: window.innerWidth - 630, y: 20 })
                     setConsolePopout(true)
                   }}
                   className="text-gray-500 hover:text-gray-300"
@@ -1165,11 +1240,44 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
 
     </div>
 
+    {/* Feedback comments panel - rendered via portal to escape JSmol's z-index stacking */}
+    {isOpen && submissionId && commentsOpen && createPortal(
+      <div
+        className="bg-white rounded-lg border border-gray-200 shadow-2xl flex flex-col overflow-hidden"
+        style={{ position: 'fixed', left: feedbackDrag.pos.x, top: feedbackDrag.pos.y, zIndex: 9999, height: '480px', width: '384px' }}
+      >
+        <div className="flex items-center justify-between px-3 py-2.5 bg-gray-50 border-b shrink-0 cursor-move select-none" onMouseDown={feedbackDrag.onMouseDown}>
+          <span className="text-gray-800 text-sm font-medium">Feedback</span>
+          <button onClick={() => setCommentsOpen(false)} className="text-gray-400 hover:text-gray-600">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+        <div className="flex-1 overflow-hidden p-3">
+          <CommentThread
+            messages={commentMessages}
+            loading={commentLoading}
+            error=""
+            onPost={async (content) => {
+              await messageApi.postSubmissionComment(submissionId, content)
+              await loadComments()
+            }}
+            onRefresh={loadComments}
+            currentUserId={user?.id}
+            onMarkRead={(lastReadAt) => messageApi.markSubmissionRead(submissionId, lastReadAt).catch(() => {})}
+            readStatuses={commentReadStatuses}
+          />
+        </div>
+      </div>,
+      document.body
+    )}
+
     {/* Chat panel - rendered via portal to escape JSmol's z-index stacking */}
     {isOpen && groupId && templateId && chatOpen && createPortal(
-      <div className="fixed bottom-6 right-6 w-96 bg-gray-900/95 rounded-lg border border-gray-700 shadow-2xl flex flex-col overflow-hidden" style={{ zIndex: 9999, height: '480px' }}>
+      <div className="bg-gray-900/95 rounded-lg border border-gray-700 shadow-2xl flex flex-col overflow-hidden" style={{ position: 'fixed', left: chatDrag.pos.x, top: chatDrag.pos.y, zIndex: 9999, width: '384px', height: '480px' }}>
         {/* Chat header */}
-        <div className="flex items-center justify-between px-3 py-2.5 bg-gray-800 shrink-0">
+        <div className="flex items-center justify-between px-3 py-2.5 bg-gray-800 shrink-0 cursor-move select-none" onMouseDown={chatDrag.onMouseDown}>
           <span className="text-white text-sm font-medium">Model Chat</span>
           <button onClick={() => setChatOpen(false)} className="text-gray-400 hover:text-white">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1332,9 +1440,9 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
     )}
     {/* Help panel - rendered via portal to escape JSmol's z-index stacking */}
     {isOpen && helpOpen && createPortal(
-      <div className="fixed bottom-6 left-6 w-105 bg-gray-900/95 rounded-lg border border-gray-700 shadow-2xl flex flex-col overflow-hidden" style={{ zIndex: 9999, maxHeight: '560px' }}>
+      <div className="bg-gray-900/95 rounded-lg border border-gray-700 shadow-2xl flex flex-col overflow-hidden" style={{ position: 'fixed', left: helpDrag.pos.x, top: helpDrag.pos.y, zIndex: 9999, width: '420px', maxHeight: '560px' }}>
         {/* Header */}
-        <div className="flex items-center justify-between px-3 py-2.5 bg-gray-800 shrink-0">
+        <div className="flex items-center justify-between px-3 py-2.5 bg-gray-800 shrink-0 cursor-move select-none" onMouseDown={helpDrag.onMouseDown}>
           <span className="text-white text-sm font-medium">JSmol Help</span>
           <button onClick={() => setHelpOpen(false)} className="text-gray-400 hover:text-white">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1619,8 +1727,8 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
       <div
         style={{
           position: 'fixed',
-          left: consolePos.x,
-          top: consolePos.y,
+          left: consoleDrag.pos.x,
+          top: consoleDrag.pos.y,
           zIndex: 9999,
           width: 620,
           height: 420,
@@ -1634,15 +1742,7 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
         {/* Draggable header */}
         <div
           className="flex items-center justify-between px-3 py-2 bg-gray-800 rounded-t-lg cursor-move select-none shrink-0"
-          onMouseDown={(e) => {
-            consoleDragRef.current = {
-              active: true,
-              startX: e.clientX,
-              startY: e.clientY,
-              startPosX: consolePos.x,
-              startPosY: consolePos.y,
-            }
-          }}
+          onMouseDown={consoleDrag.onMouseDown}
         >
           <span className="text-white text-sm font-mono font-medium">Console</span>
           <div className="flex items-center gap-3">
