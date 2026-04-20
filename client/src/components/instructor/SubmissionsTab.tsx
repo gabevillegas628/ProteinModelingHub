@@ -103,10 +103,14 @@ export default function SubmissionsTab({ groupId, proteinPdbId }: Props) {
 
   const handleRequestRevision = async (submissionId: string) => {
     try {
+      const feedback = revisionFeedback[submissionId] || ''
       await instructorApi.updateSubmission(submissionId, {
         status: 'NEEDS_REVISION',
-        feedback: revisionFeedback[submissionId] || ''
+        feedback
       })
+      if (feedback.trim()) {
+        await messageApi.postSubmissionComment(submissionId, feedback)
+      }
       setShowRevisionBox(prev => ({ ...prev, [submissionId]: false }))
       setRevisionFeedback(prev => ({ ...prev, [submissionId]: '' }))
       await loadSubmissions()
