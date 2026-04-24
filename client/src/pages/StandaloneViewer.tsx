@@ -286,16 +286,32 @@ export default function StandaloneViewer() {
 
   const handleFileUpload = (file: File) => {
     if (!appletReadyRef.current) return
-    if (uploadedObjectUrlRef.current) URL.revokeObjectURL(uploadedObjectUrlRef.current)
-    const url = URL.createObjectURL(file)
-    uploadedObjectUrlRef.current = url
+
     setModelLoading(true)
     setHasModel(false)
-    runScript(`load "${url}"; unitcell off; set displaycellparameters false;`)
+    setModelLabel(file.name.replace(/\.(png|pngj|pdb)$/i, ''))
     setDisplayStyle('cartoon')
     setColorScheme('structure')
-    setModelLabel(file.name.replace(/\.(png|pngj|pdb)$/i, ''))
-    setTimeout(() => { setHasModel(true); setModelLoading(false) }, 3000)
+
+    if (/\.pdb$/i.test(file.name)) {
+      // JSmol can't fetch blob: URLs (tries to proxy through jsmol.php).
+      // Read the PDB text and pass it inline via the DATA syntax instead.
+      const reader = new FileReader()
+      reader.onload = e => {
+        const content = e.target?.result as string
+        runScript(`load DATA "pdb"\n${content}\nEND "pdb"\nunitcell off; set displaycellparameters false;`)
+        setTimeout(() => { setHasModel(true); setModelLoading(false) }, 3000)
+      }
+      reader.onerror = () => setModelLoading(false)
+      reader.readAsText(file)
+    } else {
+      // PNGJ/PNG — blob URLs work fine for these since JSmol reads them as binary state files
+      if (uploadedObjectUrlRef.current) URL.revokeObjectURL(uploadedObjectUrlRef.current)
+      const url = URL.createObjectURL(file)
+      uploadedObjectUrlRef.current = url
+      runScript(`load "${url}"; unitcell off; set displaycellparameters false;`)
+      setTimeout(() => { setHasModel(true); setModelLoading(false) }, 3000)
+    }
   }
 
   const handleDisplayStyleChange = (style: DisplayStyle) => {
