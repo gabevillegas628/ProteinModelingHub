@@ -146,6 +146,29 @@ router.get('/groups/:groupId', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// Toggle ready-for-printing status on a group
+router.patch('/groups/:groupId/printing-status', async (req: AuthRequest, res: Response) => {
+  try {
+    const groupId = req.params.groupId as string;
+    const { readyForPrinting } = req.body as { readyForPrinting: boolean };
+
+    if (typeof readyForPrinting !== 'boolean') {
+      res.status(400).json({ error: 'readyForPrinting must be a boolean' });
+      return;
+    }
+
+    const group = await prisma.group.update({
+      where: { id: groupId },
+      data: { readyForPrinting }
+    });
+
+    res.json({ readyForPrinting: group.readyForPrinting });
+  } catch (error) {
+    console.error('Error updating printing status:', error);
+    res.status(500).json({ error: 'Failed to update printing status' });
+  }
+});
+
 // ============================================
 // SUBMISSIONS
 // ============================================

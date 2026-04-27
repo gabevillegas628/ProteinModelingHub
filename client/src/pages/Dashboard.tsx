@@ -74,32 +74,29 @@ export default function Dashboard() {
   ]
 
   return (
-    <div className="h-screen bg-gray-100 flex flex-col">
+    <div className="h-screen bg-gray-50 flex flex-col">
       {/* Header */}
-      <header className="bg-white shadow shrink-0">
-        <div className="max-w-full mx-auto px-4 py-4 flex justify-between items-center">
-          <h1 className="text-xl font-bold text-gray-800">Protein Model Organizer</h1>
-          <div className="flex flex-col items-end gap-2">
-            <div className="flex items-center gap-4">
-              <span className="text-gray-600">{user.firstName} {user.lastName}</span>
-              <span className="bg-green-600 text-white text-sm px-3 py-1 rounded-full">
-                {user.role}
-              </span>
-              <button
-                onClick={logout}
-                className="bg-red-500 text-white px-4 py-2 rounded-md hover:bg-red-600 transition-colors"
-              >
-                Logout
-              </button>
-            </div>
+      <header className="bg-white border-b border-gray-200 shrink-0">
+        <div className="px-5 py-3 flex justify-between items-center">
+          <h1 className="text-base font-semibold text-gray-700">Protein Model Organizer</h1>
+          <div className="flex items-center gap-3">
             <button
               onClick={() => setBlankViewerOpen(true)}
-              className="flex items-center gap-2 bg-gray-700 text-white px-4 py-2 rounded-md hover:bg-gray-800 transition-colors text-sm"
+              className="flex items-center gap-1.5 text-gray-500 hover:text-gray-800 text-sm transition-colors"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 10l-2 1m0 0l-2-1m2 1v2.5M20 7l-2 1m2-1l-2-1m2 1v2.5M14 4l-2-1-2 1M4 7l2-1M4 7l2 1M4 7v2.5M12 21l-2-1m2 1l2-1m-2 1v-2.5M6 18l-2-1v-2.5M18 18l2-1v-2.5" />
               </svg>
-              Open 3D Viewer
+              3D Viewer
+            </button>
+            <span className="text-gray-300">|</span>
+            <span className="text-sm text-gray-500">{user.firstName} {user.lastName}</span>
+            <span className="bg-green-100 text-green-700 text-sm px-2 py-0.5 rounded-full font-medium">{user.role}</span>
+            <button
+              onClick={logout}
+              className="text-sm text-red-500 hover:text-red-700 transition-colors"
+            >
+              Logout
             </button>
           </div>
         </div>
@@ -108,39 +105,35 @@ export default function Dashboard() {
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
         {/* Sidebar */}
-        <aside className="w-64 bg-white shadow-lg shrink-0 flex flex-col">
-          <div className="p-4 border-b">
-            <h2 className="text-sm font-semibold text-gray-500 uppercase tracking-wider">
-              Your Groups
-            </h2>
+        <aside className="w-64 bg-white border-r border-gray-200 shrink-0 flex flex-col">
+          <div className="px-3 pt-4 pb-2">
+            <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-2">Navigation</p>
           </div>
 
           {loading ? (
-            <div className="p-4 text-gray-500 text-sm">Loading groups...</div>
+            <div className="px-5 py-3 text-gray-500 text-sm">Loading groups...</div>
           ) : error ? (
-            <div className="p-4 text-red-500 text-sm">{error}</div>
+            <div className="px-5 py-3 text-red-500 text-sm">{error}</div>
           ) : groups.length === 0 ? (
-            <div className="p-4 text-gray-500 text-sm">
-              You are not assigned to any groups yet.
-            </div>
+            <div className="px-5 py-3 text-gray-500 text-sm">No groups yet.</div>
           ) : (
-            <nav className="flex-1 overflow-y-auto">
+            <nav className="flex-1 overflow-y-auto px-3 pb-4 flex flex-col gap-0.5">
               <button
                 onClick={() => { setSelectedGroupId(null); setSidebarView('overview') }}
-                className={`w-full text-left px-4 py-3 border-b border-gray-100 text-sm font-medium transition-colors ${
+                className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                   selectedGroupId === null && sidebarView === 'overview'
-                    ? 'bg-blue-50 border-l-4 border-l-blue-600 text-blue-700'
-                    : 'text-gray-600 hover:bg-gray-50'
+                    ? 'bg-blue-50 text-blue-700'
+                    : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
                 Overview
               </button>
               <button
                 onClick={() => { setSelectedGroupId(null); setSidebarView('presentations') }}
-                className={`w-full text-left px-4 py-3 border-b border-gray-100 text-sm font-medium transition-colors flex items-center gap-2 ${
+                className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
                   sidebarView === 'presentations' && selectedGroupId === null
-                    ? 'bg-blue-50 border-l-4 border-l-blue-600 text-blue-700'
-                    : 'text-gray-600 hover:bg-gray-50'
+                    ? 'bg-blue-50 text-blue-700'
+                    : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
                 <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -150,10 +143,10 @@ export default function Dashboard() {
               </button>
               <button
                 onClick={() => { setSelectedGroupId(null); setSidebarView('messages') }}
-                className={`w-full text-left px-4 py-3 border-b border-gray-100 text-sm font-medium transition-colors flex items-center justify-between gap-2 ${
+                className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-between gap-2 ${
                   sidebarView === 'messages' && selectedGroupId === null
-                    ? 'bg-blue-50 border-l-4 border-l-blue-600 text-blue-700'
-                    : 'text-gray-600 hover:bg-gray-50'
+                    ? 'bg-blue-50 text-blue-700'
+                    : 'text-gray-600 hover:bg-gray-100'
                 }`}
               >
                 <span className="flex items-center gap-2">
@@ -168,35 +161,41 @@ export default function Dashboard() {
                   </span>
                 )}
               </button>
+
+              <div className="px-2 pt-3 pb-1">
+                <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider">Groups</p>
+              </div>
+
               {groups.map((group) => (
                 <button
                   key={group.id}
                   onClick={() => { setSelectedGroupId(group.id); setSidebarView('overview') }}
-                  className={`w-full text-left px-4 py-3 border-b border-gray-100 transition-colors ${
+                  className={`w-full text-left px-3 py-2.5 rounded-lg transition-colors ${
                     selectedGroupId === group.id
-                      ? 'bg-blue-50 border-l-4 border-l-blue-600'
-                      : 'hover:bg-gray-50'
+                      ? 'bg-blue-50 text-blue-700 border-3 border-blue-400'
+                      : 'hover:bg-gray-100'
                   }`}
                 >
                   <div className="flex items-center justify-between">
-                    <div className="font-medium text-gray-800 truncate">{group.name.split(' - ')[0]}</div>
+                    <div className={`font-medium text-sm truncate ${selectedGroupId === group.id ? 'text-blue-700' : 'text-gray-800'}`}>
+                      {group.name.split(' - ')[0]}
+                    </div>
                     {group.unreadMessageCount > 0 && (
-                      <span className="bg-red-500 text-white text-xs font-medium px-2 py-0.5 rounded-full min-w-5 text-center">
+                      <span className="bg-red-500 text-white text-xs font-medium px-2 py-0.5 rounded-full min-w-5 text-center shrink-0">
                         {group.unreadMessageCount}
                       </span>
                     )}
                   </div>
-                  <div className="text-xs text-gray-500 mt-1 truncate">
-                    {group.proteinName} ({group.proteinPdbId})
+                  <div className="text-xs text-gray-400 mt-0.5 truncate">
+                    {group.proteinName}
                   </div>
-                  <div className="flex gap-3 mt-2 text-xs">
-                    <span className="text-gray-500">
-                      {group.submissionCount} submissions
-                    </span>
+                  <div className="flex gap-2 mt-1.5 text-xs flex-wrap">
+                    <span className="text-gray-400">{group.proteinPdbId} &bull; {group.submissionCount} submitted</span>
                     {group.pendingCount > 0 && (
-                      <span className="text-amber-600 font-medium">
-                        {group.pendingCount} pending
-                      </span>
+                      <span className="text-amber-600 font-medium">{group.pendingCount} pending</span>
+                    )}
+                    {group.readyForPrinting && (
+                      <span className="text-violet-600 font-medium">Ready to print</span>
                     )}
                   </div>
                 </button>
@@ -209,26 +208,43 @@ export default function Dashboard() {
         <main className="flex-1 overflow-hidden flex flex-col">
           {selectedGroup ? (
             <>
-              {/* Group Header */}
-              <div className="bg-white shadow-sm px-6 py-4 shrink-0">
-                <h2 className="text-xl font-semibold text-gray-800">{selectedGroup.name}</h2>
-                <p className="text-sm text-gray-500">
-                  Protein: {selectedGroup.proteinName} ({selectedGroup.proteinPdbId})
-                  &bull; {selectedGroup.memberCount} members
-                </p>
-              </div>
-
-              {/* Tab Navigation */}
-              <div className="bg-white border-b shrink-0">
+              {/* Group Header + Tabs (single surface) */}
+              <div className="bg-white border-b border-gray-200 shrink-0">
+                <div className="px-6 pt-4 pb-3 flex items-start justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold text-gray-800">{selectedGroup.name}</h2>
+                    <p className="text-sm text-gray-400 mt-0.5">
+                      {selectedGroup.proteinName} ({selectedGroup.proteinPdbId})
+                      &bull; {selectedGroup.memberCount} members
+                    </p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      const next = !selectedGroup.readyForPrinting;
+                      await instructorApi.updateGroupPrintingStatus(selectedGroup.id, next);
+                      setGroups(prev => prev.map(g => g.id === selectedGroup.id ? { ...g, readyForPrinting: next } : g));
+                    }}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                      selectedGroup.readyForPrinting
+                        ? 'bg-violet-600 text-white hover:bg-violet-700'
+                        : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                    {selectedGroup.readyForPrinting ? 'Ready to Print' : 'Mark Ready to Print'}
+                  </button>
+                </div>
                 <nav className="flex px-6">
                   {tabs.map((tab) => (
                     <button
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id)}
-                      className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors ${
+                      className={`flex items-center gap-2 px-3 py-2.5 text-sm font-medium transition-colors border-b-2 ${
                         activeTab === tab.id
-                          ? 'border-b-2 border-blue-600 text-blue-600'
-                          : 'text-gray-500 hover:text-gray-700'
+                          ? 'border-blue-600 text-blue-600'
+                          : 'border-transparent text-gray-500 hover:text-gray-700'
                       }`}
                     >
                       {tab.icon}
