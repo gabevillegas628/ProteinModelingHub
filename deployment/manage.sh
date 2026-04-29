@@ -90,10 +90,12 @@ rebuild_app() {
     echo "Updating server code..."
     rm -rf "$INSTANCE_DIR/server/src"
     rm -rf "$INSTANCE_DIR/server/prisma"
+    rm -rf "$INSTANCE_DIR/server/scripts"
     cp -r "$PROJECT_DIR/server/src" "$INSTANCE_DIR/server/src"
     cp "$PROJECT_DIR/server/package.json" "$INSTANCE_DIR/server/package.json"
     cp "$PROJECT_DIR/server/tsconfig.json" "$INSTANCE_DIR/server/tsconfig.json"
     cp -r "$PROJECT_DIR/server/prisma" "$INSTANCE_DIR/server/prisma"
+    cp -r "$PROJECT_DIR/server/scripts" "$INSTANCE_DIR/server/scripts"
 
     # Update client code
     echo "Updating client code..."
