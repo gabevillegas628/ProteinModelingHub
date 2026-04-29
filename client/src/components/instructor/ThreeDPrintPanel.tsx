@@ -102,7 +102,7 @@ export default function ThreeDPrintPanel() {
         height: 500,
         color: '0x000000',
         use: 'HTML5',
-        j2sPath: '/modeling/j2s',
+        j2sPath: '/modeling/jsmol/j2s',
         script: `load "${fileUrl}"`,
         disableJ2SLoadMonitor: true,
         disableInitialConsole: true,
