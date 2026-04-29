@@ -789,11 +789,13 @@ router.post('/print/convert', x3dUpload.single('file'), async (req: AuthRequest,
 
     await new Promise<void>((resolve, reject) => {
       const tryPython = (cmd: string) => {
-        execFile(cmd, [scriptPath, tmpInput, tmpOutput], { timeout: 60000 }, (err) => {
+        execFile(cmd, [scriptPath, tmpInput, tmpOutput], { timeout: 60000 }, (err, _stdout, stderr) => {
           if (err && cmd === 'python') {
             tryPython('python3');
           } else if (err) {
-            reject(new Error(`Conversion failed: ${err.message}`));
+            const detail = stderr?.trim() || err.message;
+            console.error('Python stderr:', stderr);
+            reject(new Error(`Conversion failed: ${detail}`));
           } else {
             resolve();
           }
