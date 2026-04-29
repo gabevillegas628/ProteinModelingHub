@@ -273,3 +273,38 @@ export interface GroupActivity {
 export function getGroupActivity(groupId: string): Promise<GroupActivity> {
   return request(`/groups/${groupId}/activity`);
 }
+
+// ============================================
+// 3D Printing
+// ============================================
+
+export interface PrintTemplate extends ModelTemplate {
+  submission: Submission;
+}
+
+export interface PrintGroup extends Omit<Group, 'submissionCount' | 'pendingCount' | 'memberCount' | 'unreadMessageCount' | 'activeTemplateCount'> {
+  templates: PrintTemplate[];
+}
+
+export function getPrintGroups(): Promise<PrintGroup[]> {
+  return request('/print/groups');
+}
+
+export async function convertX3dTo3mf(x3dFile: File, _outputName: string): Promise<Blob> {
+  const token = localStorage.getItem('modeling_token');
+  const formData = new FormData();
+  formData.append('file', x3dFile);
+
+  const response = await fetch(`${API_BASE}/print/convert`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Conversion failed' }));
+    throw new Error(error.error || 'Conversion failed');
+  }
+
+  return response.blob();
+}

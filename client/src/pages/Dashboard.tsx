@@ -7,10 +7,11 @@ import InstructorDiscussionTab from '../components/instructor/DiscussionTab'
 import InstructorSummaryTab from '../components/instructor/SummaryTab'
 import InstructorPresentationsTab from '../components/instructor/PresentationsTab'
 import MessagesInbox from '../components/instructor/MessagesInbox'
+import ThreeDPrintPanel from '../components/instructor/ThreeDPrintPanel'
 import JSmolViewer from '../components/shared/JSmolViewer'
 
 type TabType = 'submissions' | 'literature' | 'discussion'
-type SidebarView = 'overview' | 'presentations' | 'messages'
+type SidebarView = 'overview' | 'presentations' | 'messages' | 'printing'
 
 export default function Dashboard() {
   const { user, logout } = useAuth()
@@ -142,6 +143,19 @@ export default function Dashboard() {
                 Presentations
               </button>
               <button
+                onClick={() => { setSelectedGroupId(null); setSidebarView('printing') }}
+                className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+                  sidebarView === 'printing' && selectedGroupId === null
+                    ? 'bg-violet-50 text-violet-700'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+                3D Printing
+              </button>
+              <button
                 onClick={() => { setSelectedGroupId(null); setSidebarView('messages') }}
                 className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-between gap-2 ${
                   sidebarView === 'messages' && selectedGroupId === null
@@ -270,6 +284,8 @@ export default function Dashboard() {
                 )}
               </div>
             </>
+          ) : sidebarView === 'printing' ? (
+            <ThreeDPrintPanel />
           ) : sidebarView === 'messages' ? (
             <div className="flex-1 overflow-y-auto">
               <MessagesInbox onUnreadCountChange={setInboxUnreadCount} />

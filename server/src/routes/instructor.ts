@@ -2,6 +2,9 @@ import { Router, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import os from 'os';
+import { execFile } from 'child_process';
+import { randomUUID } from 'crypto';
 import { SubmissionStatus } from '@prisma/client';
 import { authenticate, requireRole, AuthRequest } from '../middleware/auth.js';
 import { prisma } from '../lib/prisma.js';
@@ -706,6 +709,118 @@ router.get('/messages/threads', async (req: AuthRequest, res: Response) => {
   } catch (error) {
     console.error('Error fetching message threads:', error);
     res.status(500).json({ error: 'Failed to fetch message threads' });
+  }
+});
+
+// ============================================
+// 3D PRINTING
+// ============================================
+
+const x3dUpload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (ext === '.x3d') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only X3D files are allowed'));
+    }
+  },
+  limits: { fileSize: 20 * 1024 * 1024 }
+});
+
+// Get groups marked ready-for-printing with their submitted templates
+router.get('/print/groups', async (_req: AuthRequest, res: Response) => {
+  try {
+    const groups = await prisma.group.findMany({
+      where: { readyForPrinting: true },
+      orderBy: { name: 'asc' }
+    });
+
+    const templates = await prisma.modelTemplate.findMany({
+      where: { isActive: true },
+      orderBy: { orderIndex: 'asc' }
+    });
+
+    const result = await Promise.all(groups.map(async (group) => {
+      const submissions = await prisma.submission.findMany({
+        where: { groupId: group.id, status: { not: 'DRAFT' } },
+        orderBy: { createdAt: 'desc' }
+      });
+
+      const templatesWithSubmissions = templates
+        .map(template => ({
+          ...template,
+          submission: submissions.find(s => s.modelTemplateId === template.id) ?? null
+        }))
+        .filter(t => t.submission !== null);
+
+      return { ...group, templates: templatesWithSubmissions };
+    }));
+
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching print groups:', error);
+    res.status(500).json({ error: 'Failed to fetch print groups' });
+  }
+});
+
+// Convert uploaded X3D to 3MF via Python script
+router.post('/print/convert', x3dUpload.single('file'), async (req: AuthRequest, res: Response) => {
+  const id = randomUUID();
+  const tmpInput = path.join(os.tmpdir(), `${id}.x3d`);
+  const tmpOutput = path.join(os.tmpdir(), `${id}.3mf`);
+
+  const cleanup = () => {
+    try { if (fs.existsSync(tmpInput)) fs.unlinkSync(tmpInput); } catch {}
+    try { if (fs.existsSync(tmpOutput)) fs.unlinkSync(tmpOutput); } catch {}
+  };
+
+  try {
+    const file = req.file;
+    if (!file) {
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+
+    fs.writeFileSync(tmpInput, file.buffer);
+
+    const scriptPath = path.join(process.cwd(), 'scripts', 'x3d_to_3mf.py');
+
+    await new Promise<void>((resolve, reject) => {
+      const tryPython = (cmd: string) => {
+        execFile(cmd, [scriptPath, tmpInput, tmpOutput], { timeout: 60000 }, (err) => {
+          if (err && cmd === 'python') {
+            tryPython('python3');
+          } else if (err) {
+            reject(new Error(`Conversion failed: ${err.message}`));
+          } else {
+            resolve();
+          }
+        });
+      };
+      tryPython('python');
+    });
+
+    if (!fs.existsSync(tmpOutput)) {
+      cleanup();
+      res.status(500).json({ error: 'Conversion produced no output' });
+      return;
+    }
+
+    const baseName = path.basename(file.originalname, '.x3d');
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', `attachment; filename="${baseName}.3mf"`);
+    res.sendFile(tmpOutput, (err) => {
+      cleanup();
+      if (err) console.error('Error sending 3MF file:', err);
+    });
+  } catch (error) {
+    cleanup();
+    console.error('Error converting X3D to 3MF:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: error instanceof Error ? error.message : 'Conversion failed' });
+    }
   }
 });
 
