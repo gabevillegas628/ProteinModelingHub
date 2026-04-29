@@ -50,32 +50,14 @@ export default function ThreeDPrintPanel() {
     })
   }
 
-  const captureX3d = (applet: JmolApplet): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const originalClick = HTMLAnchorElement.prototype.click
-      let captured = false
-
-      const timeoutId = setTimeout(() => {
-        HTMLAnchorElement.prototype.click = originalClick
-        if (!captured) reject(new Error('Timed out waiting for X3D export from JSmol'))
-      }, 10000)
-
-      HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
-        if (this.download && this.href && !captured) {
-          captured = true
-          clearTimeout(timeoutId)
-          HTMLAnchorElement.prototype.click = originalClick
-          fetch(this.href)
-            .then(r => r.text())
-            .then(resolve)
-            .catch(reject)
-          return
-        }
-        originalClick.call(this)
-      }
-
-      window.Jmol.script(applet, 'write x3d')
-    })
+  const captureX3d = (applet: JmolApplet): string => {
+    // evaluateVar('write("x3d")') returns the X3D content as a string directly,
+    // avoiding the need to intercept a download anchor (which behaves differently for text vs binary).
+    const result = window.Jmol.evaluateVar(applet, 'write("x3d")')
+    if (typeof result !== 'string' || result.trim().length === 0) {
+      throw new Error('JSmol returned empty X3D content — model may not have finished loading')
+    }
+    return result
   }
 
   const handleExport = async (submission: instructorApi.Submission, templateName: string, groupName: string) => {
@@ -113,7 +95,7 @@ export default function ThreeDPrintPanel() {
 
       await waitForModelLoad(applet)
 
-      const x3dContent = await captureX3d(applet)
+      const x3dContent = captureX3d(applet)
 
       const safeName = `${groupName}_${templateName}`.replace(/[^a-zA-Z0-9]/g, '_')
       const x3dFile = new File([x3dContent], `${safeName}.x3d`, { type: 'model/x3d+xml' })
@@ -128,7 +110,7 @@ export default function ThreeDPrintPanel() {
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
     } catch (err) {
-      setExportError(err instanceof Error ? err.message : 'Export failed')
+      setExportError(err instanceof Error ? err.message : String(err) || 'Export failed')
     } finally {
       if (exportContainerRef.current) {
         document.body.removeChild(exportContainerRef.current)
