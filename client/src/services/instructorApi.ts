@@ -41,6 +41,7 @@ export interface Group {
   memberCount: number;
   unreadMessageCount: number;
   readyForPrinting: boolean;
+  schoolName?: string | null;
   teacherName?: string;
   teacherEmail?: string;
 }

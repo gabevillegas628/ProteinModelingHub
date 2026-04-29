@@ -60,7 +60,7 @@ export default function ThreeDPrintPanel() {
     return result
   }
 
-  const handleExport = async (submission: instructorApi.Submission, templateName: string, groupName: string) => {
+  const handleExport = async (submission: instructorApi.Submission, schoolName: string | null | undefined, proteinPdbId: string) => {
     if (!window.Jmol) {
       setExportError('JSmol is not loaded. Open the 3D Viewer first to initialize it.')
       return
@@ -97,14 +97,14 @@ export default function ThreeDPrintPanel() {
 
       const x3dContent = captureX3d(applet)
 
-      const safeName = `${groupName}_${templateName}`.replace(/[^a-zA-Z0-9]/g, '_')
-      const x3dFile = new File([x3dContent], `${safeName}.x3d`, { type: 'model/x3d+xml' })
-      const blob = await instructorApi.convertX3dTo3mf(x3dFile, `${safeName}.3mf`)
+      const baseName = `${schoolName ?? 'group'}-${proteinPdbId}`.replace(/[^a-zA-Z0-9-]/g, '_')
+      const x3dFile = new File([x3dContent], `${baseName}.x3d`, { type: 'model/x3d+xml' })
+      const blob = await instructorApi.convertX3dTo3mf(x3dFile, `${baseName}.3mf`)
 
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `${safeName}.3mf`
+      a.download = `${baseName}.3mf`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -206,7 +206,7 @@ export default function ThreeDPrintPanel() {
                             View
                           </button>
                           <button
-                            onClick={() => handleExport(template.submission, template.name, group.name)}
+                            onClick={() => handleExport(template.submission, group.schoolName, group.proteinPdbId)}
                             disabled={exportingId !== null}
                             className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg font-medium transition-colors ${
                               exportingId === template.submission.id
