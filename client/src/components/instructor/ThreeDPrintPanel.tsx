@@ -18,6 +18,7 @@ export default function ThreeDPrintPanel() {
   const [exportingId, setExportingId] = useState<string | null>(null)
   const [exportError, setExportError] = useState<string | null>(null)
   const [viewer, setViewer] = useState<ViewerState | null>(null)
+  const [selectedTemplateId, setSelectedTemplateId] = useState<Record<string, string>>({})
   const exportContainerRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -175,69 +176,66 @@ export default function ThreeDPrintPanel() {
 
                 {group.templates.length === 0 ? (
                   <div className="px-5 py-4 text-sm text-gray-400">No submitted models.</div>
-                ) : (
-                  <div className="divide-y divide-gray-100">
-                    {group.templates.map(template => (
-                      <div key={template.id} className="px-5 py-4 flex items-center justify-between gap-4">
-                        <div>
-                          <p className="text-sm font-medium text-gray-800">{template.name}</p>
-                          <p className="text-xs text-gray-400 mt-0.5">
-                            {template.submission.status === 'APPROVED' ? (
-                              <span className="text-green-600 font-medium">Approved</span>
-                            ) : (
-                              <span className="text-amber-600 font-medium">{template.submission.status}</span>
-                            )}
-                            {' '}· {template.submission.submittedBy?.firstName} {template.submission.submittedBy?.lastName}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <button
-                            onClick={() => setViewer({
-                              submissionId: template.submission.id,
-                              templateName: template.name,
-                              groupName: group.name,
-                            })}
-                            className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors"
-                          >
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                ) : (() => {
+                  const selectedId = selectedTemplateId[group.id] ?? group.templates[group.templates.length - 1].id
+                  const selected = group.templates.find(t => t.id === selectedId) ?? group.templates[group.templates.length - 1]
+                  const isExporting = exportingId === selected.submission.id
+                  return (
+                    <div className="px-5 py-4 flex items-center gap-3">
+                      <select
+                        value={selectedId}
+                        onChange={e => setSelectedTemplateId(prev => ({ ...prev, [group.id]: e.target.value }))}
+                        className="flex-1 text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-violet-300"
+                      >
+                        {group.templates.map(t => (
+                          <option key={t.id} value={t.id}>{t.name}</option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => setViewer({
+                          submissionId: selected.submission.id,
+                          templateName: selected.name,
+                          groupName: group.name,
+                        })}
+                        className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors shrink-0"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        View
+                      </button>
+                      <button
+                        onClick={() => handleExport(selected.submission, group.schoolName, group.proteinPdbId)}
+                        disabled={exportingId !== null}
+                        className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg font-medium transition-colors shrink-0 ${
+                          isExporting
+                            ? 'bg-violet-100 text-violet-500 cursor-wait'
+                            : exportingId !== null
+                            ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                            : 'bg-violet-600 text-white hover:bg-violet-700'
+                        }`}
+                      >
+                        {isExporting ? (
+                          <>
+                            <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                             </svg>
-                            View
-                          </button>
-                          <button
-                            onClick={() => handleExport(template.submission, group.schoolName, group.proteinPdbId)}
-                            disabled={exportingId !== null}
-                            className={`flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg font-medium transition-colors ${
-                              exportingId === template.submission.id
-                                ? 'bg-violet-100 text-violet-500 cursor-wait'
-                                : exportingId !== null
-                                ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-                                : 'bg-violet-600 text-white hover:bg-violet-700'
-                            }`}
-                          >
-                            {exportingId === template.submission.id ? (
-                              <>
-                                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                                </svg>
-                                Exporting...
-                              </>
-                            ) : (
-                              <>
-                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                                </svg>
-                                Export 3MF
-                              </>
-                            )}
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                            Exporting...
+                          </>
+                        ) : (
+                          <>
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                            </svg>
+                            Export 3MF
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  )
+                })()}
               </div>
             ))}
           </div>
