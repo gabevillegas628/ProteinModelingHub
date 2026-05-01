@@ -264,7 +264,7 @@ export default function SummaryTab({ groups, onSelectGroup }: Props) {
           {collapsedGroups.size === 0 ? 'Collapse all' : 'Expand all'}
         </button>
       </div>
-      <div className="grid grid-cols-2 gap-6 items-start">
+      <div className="grid grid-cols-2 3xl:grid-cols-3 gap-6 items-start">
       {groups.map(group => {
         const models = submissionMap[group.id] ?? []
         const total = group.activeTemplateCount
@@ -384,7 +384,16 @@ export default function SummaryTab({ groups, onSelectGroup }: Props) {
                             className="border-b border-gray-50 last:border-0 cursor-pointer hover:bg-blue-50 transition-colors"
                             onClick={() => onSelectGroup(group.id)}
                           >
-                            <td className="px-5 py-2.5 font-medium text-gray-700 w-2/5">{model.name}</td>
+                            <td className="px-5 py-2.5 font-medium text-gray-700 w-2/5">
+                              <div className="flex items-center gap-2">
+                                {model.name}
+                                {(model.submission?.unreadCount ?? 0) > 0 && (
+                                  <span className="inline-flex items-center justify-center min-w-5 h-5 px-1.5 text-xs font-semibold bg-red-500 text-white rounded-full">
+                                    {model.submission!.unreadCount}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
                             <td className="px-5 py-2.5">
                               {model.submission ? (
                                 <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_STYLES[model.submission.status] ?? STATUS_STYLES.DRAFT}`}>
