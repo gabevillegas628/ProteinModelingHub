@@ -211,7 +211,7 @@ export default function Dashboard() {
                     {group.pendingCount > 0 && (
                       <span className="text-amber-600 font-medium">{group.pendingCount} pending</span>
                     )}
-                    {group.readyForPrinting && (
+                    {group.readyForPrinting !== null && (
                       <span className="text-violet-600 font-medium">Ready to print</span>
                     )}
                   </div>
@@ -238,11 +238,11 @@ export default function Dashboard() {
                   <button
                     onClick={async () => {
                       const next = !selectedGroup.readyForPrinting;
-                      await instructorApi.updateGroupPrintingStatus(selectedGroup.id, next);
-                      setGroups(prev => prev.map(g => g.id === selectedGroup.id ? { ...g, readyForPrinting: next } : g));
+                      const result = await instructorApi.updateGroupPrintingStatus(selectedGroup.id, next);
+                      setGroups(prev => prev.map(g => g.id === selectedGroup.id ? { ...g, readyForPrinting: result.readyForPrinting } : g));
                     }}
                     className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                      selectedGroup.readyForPrinting
+                      selectedGroup.readyForPrinting !== null
                         ? 'bg-violet-600 text-white hover:bg-violet-700'
                         : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                     }`}
@@ -250,7 +250,7 @@ export default function Dashboard() {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                     </svg>
-                    {selectedGroup.readyForPrinting ? 'Ready to Print' : 'Mark Ready to Print'}
+                    {selectedGroup.readyForPrinting !== null ? 'Ready to Print' : 'Mark Ready to Print'}
                   </button>
                 </div>
                 <nav className="flex px-6">

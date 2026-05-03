@@ -40,7 +40,7 @@ export interface Group {
   activeTemplateCount: number;
   memberCount: number;
   unreadMessageCount: number;
-  readyForPrinting: boolean;
+  readyForPrinting: string | null;
   schoolName?: string | null;
   teacherName?: string;
   teacherEmail?: string;
@@ -166,7 +166,7 @@ export function getGroup(groupId: string): Promise<GroupDetails> {
 export function updateGroupPrintingStatus(
   groupId: string,
   readyForPrinting: boolean
-): Promise<{ readyForPrinting: boolean }> {
+): Promise<{ readyForPrinting: string | null }> {
   return request(`/groups/${groupId}/printing-status`, {
     method: 'PATCH',
     body: JSON.stringify({ readyForPrinting })

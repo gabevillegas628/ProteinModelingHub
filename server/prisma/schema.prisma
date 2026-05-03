@@ -89,7 +89,7 @@ model Group {
   proteinPdbId           String    // PDB identifier, e.g., "1ABC"
   proteinName            String    // Display name, e.g., "Hemoglobin"
   lastReviewRequestedAt  DateTime? // When students last requested instructor review
-  readyForPrinting       Boolean   @default(false)
+  readyForPrinting       DateTime?
   // WSSP Application Fields (populated on approval)
   wsspSchoolNumber        String?
   schoolName              String?

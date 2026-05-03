@@ -162,7 +162,7 @@ router.patch('/groups/:groupId/printing-status', async (req: AuthRequest, res: R
 
     const group = await prisma.group.update({
       where: { id: groupId },
-      data: { readyForPrinting }
+      data: { readyForPrinting: readyForPrinting ? new Date() : null }
     });
 
     res.json({ readyForPrinting: group.readyForPrinting });
@@ -733,8 +733,8 @@ const x3dUpload = multer({
 router.get('/print/groups', async (_req: AuthRequest, res: Response) => {
   try {
     const groups = await prisma.group.findMany({
-      where: { readyForPrinting: true },
-      orderBy: { name: 'asc' }
+      where: { readyForPrinting: { not: null } },
+      orderBy: { readyForPrinting: 'asc' }
     });
 
     const templates = await prisma.modelTemplate.findMany({
