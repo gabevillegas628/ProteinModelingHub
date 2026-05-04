@@ -41,6 +41,7 @@ export interface Group {
   memberCount: number;
   unreadMessageCount: number;
   readyForPrinting: string | null;
+  printedAt: string | null;
   schoolName?: string | null;
   teacherName?: string;
   teacherEmail?: string;
@@ -161,6 +162,16 @@ export function getMessageThreads(): Promise<MessageThread[]> {
 
 export function getGroup(groupId: string): Promise<GroupDetails> {
   return request(`/groups/${groupId}`);
+}
+
+export function updateGroupPrintedStatus(
+  groupId: string,
+  printed: boolean
+): Promise<{ printedAt: string | null }> {
+  return request(`/groups/${groupId}/printed-status`, {
+    method: 'PATCH',
+    body: JSON.stringify({ printed })
+  });
 }
 
 export function updateGroupPrintingStatus(

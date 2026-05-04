@@ -172,6 +172,29 @@ router.patch('/groups/:groupId/printing-status', async (req: AuthRequest, res: R
   }
 });
 
+// Toggle printed status on a group
+router.patch('/groups/:groupId/printed-status', async (req: AuthRequest, res: Response) => {
+  try {
+    const groupId = req.params.groupId as string;
+    const { printed } = req.body as { printed: boolean };
+
+    if (typeof printed !== 'boolean') {
+      res.status(400).json({ error: 'printed must be a boolean' });
+      return;
+    }
+
+    const group = await prisma.group.update({
+      where: { id: groupId },
+      data: { printedAt: printed ? new Date() : null }
+    });
+
+    res.json({ printedAt: group.printedAt });
+  } catch (error) {
+    console.error('Error updating printed status:', error);
+    res.status(500).json({ error: 'Failed to update printed status' });
+  }
+});
+
 // ============================================
 // SUBMISSIONS
 // ============================================

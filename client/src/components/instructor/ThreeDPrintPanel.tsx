@@ -17,6 +17,7 @@ export default function ThreeDPrintPanel() {
   const [error, setError] = useState('')
   const [exportingId, setExportingId] = useState<string | null>(null)
   const [exportError, setExportError] = useState<string | null>(null)
+  const [markingPrintedId, setMarkingPrintedId] = useState<string | null>(null)
   const [viewer, setViewer] = useState<ViewerState | null>(null)
   const [selectedTemplateId, setSelectedTemplateId] = useState<Record<string, string>>({})
   const exportContainerRef = useRef<HTMLDivElement | null>(null)
@@ -160,18 +161,46 @@ export default function ThreeDPrintPanel() {
         ) : (
           <div className="space-y-4">
             {groups.map(group => (
-              <div key={group.id} className="bg-white border border-gray-200 rounded-xl overflow-hidden">
-                <div className="px-5 py-4 border-b border-gray-100 bg-violet-50">
+              <div key={group.id} className={`bg-white border rounded-xl overflow-hidden ${group.printedAt ? 'border-green-200' : 'border-gray-200'}`}>
+                <div className={`px-5 py-4 border-b flex items-center justify-between ${group.printedAt ? 'bg-green-50 border-green-100' : 'bg-violet-50 border-gray-100'}`}>
                   <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center gap-1.5 text-xs font-medium text-violet-700 bg-violet-100 px-2 py-0.5 rounded-full">
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                      </svg>
-                      Ready to Print
-                    </span>
+                    {group.printedAt ? (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        Printed
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 text-xs font-medium text-violet-700 bg-violet-100 px-2 py-0.5 rounded-full">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                        </svg>
+                        Ready to Print
+                      </span>
+                    )}
                     <h3 className="text-sm font-semibold text-gray-800">{group.name}</h3>
                     <span className="text-xs text-gray-400">{group.proteinName} ({group.proteinPdbId})</span>
                   </div>
+                  <button
+                    disabled={markingPrintedId === group.id}
+                    onClick={async () => {
+                      setMarkingPrintedId(group.id)
+                      try {
+                        const result = await instructorApi.updateGroupPrintedStatus(group.id, !group.printedAt)
+                        setGroups(prev => prev.map(g => g.id === group.id ? { ...g, printedAt: result.printedAt } : g))
+                      } finally {
+                        setMarkingPrintedId(null)
+                      }
+                    }}
+                    className={`text-xs px-3 py-1.5 rounded-lg font-medium transition-colors ${
+                      group.printedAt
+                        ? 'bg-white border border-green-200 text-green-700 hover:bg-green-50'
+                        : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    {group.printedAt ? 'Mark as Unprinted' : 'Mark as Printed'}
+                  </button>
                 </div>
 
                 {group.templates.length === 0 ? (
