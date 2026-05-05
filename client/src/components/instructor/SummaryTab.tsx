@@ -8,6 +8,7 @@ import JSmolViewer from '../shared/JSmolViewer'
 interface Props {
   groups: instructorApi.Group[]
   onSelectGroup: (groupId: string) => void
+  onTogglePrinting?: (groupId: string) => void
 }
 
 function timeAgo(dateStr: string): string {
@@ -170,7 +171,7 @@ const STATUS_LABELS: Record<string, string> = {
   DRAFT: 'Draft',
 }
 
-export default function SummaryTab({ groups, onSelectGroup }: Props) {
+export default function SummaryTab({ groups, onSelectGroup, onTogglePrinting }: Props) {
   const [submissionMap, setSubmissionMap] = useState<Record<string, instructorApi.ModelWithSubmission[]>>({})
   const [loadingSubmissions, setLoadingSubmissions] = useState(true)
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set())
@@ -319,6 +320,22 @@ export default function SummaryTab({ groups, onSelectGroup }: Props) {
                   )}
                   {lastActivity && (
                     <span className="text-xs text-gray-400">Last activity: {lastActivity}</span>
+                  )}
+                  {onTogglePrinting && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onTogglePrinting(group.id) }}
+                      title={group.readyForPrinting !== null ? 'Ready to Print — click to unmark' : 'Mark Ready to Print'}
+                      className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                        group.readyForPrinting !== null
+                          ? 'bg-violet-100 text-violet-700 hover:bg-violet-200'
+                          : 'text-gray-400 hover:text-violet-600 hover:bg-violet-50'
+                      }`}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                      </svg>
+                      {group.readyForPrinting !== null ? 'Ready to Print' : 'Print'}
+                    </button>
                   )}
                 </div>
               </div>

@@ -302,6 +302,12 @@ export default function Dashboard() {
               <InstructorSummaryTab
                 groups={groups}
                 onSelectGroup={(id) => { setSelectedGroupId(id); setActiveTab('submissions') }}
+                onTogglePrinting={async (id) => {
+                  const group = groups.find(g => g.id === id)
+                  if (!group) return
+                  const result = await instructorApi.updateGroupPrintingStatus(id, group.readyForPrinting === null)
+                  setGroups(prev => prev.map(g => g.id === id ? { ...g, readyForPrinting: result.readyForPrinting } : g))
+                }}
               />
             </div>
           )}
