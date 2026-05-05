@@ -3,6 +3,7 @@ import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend,
 } from 'recharts'
 import * as instructorApi from '../../services/instructorApi'
+import JSmolViewer from '../shared/JSmolViewer'
 
 interface Props {
   groups: instructorApi.Group[]
@@ -178,6 +179,10 @@ export default function SummaryTab({ groups, onSelectGroup }: Props) {
   }>>({})
   const [activityOpen, setActivityOpen] = useState<Record<string, boolean>>({})
   const [activityData, setActivityData] = useState<Record<string, instructorApi.GroupActivity | 'loading'>>({})
+  const [viewer, setViewer] = useState<{
+    isOpen: boolean; fileUrl: string; modelName: string;
+    proteinPdbId?: string; groupId?: string; templateId?: string; submissionId?: string
+  }>({ isOpen: false, fileUrl: '', modelName: '' })
 
   const groupKey = groups.map(g => g.id).join(',')
 
@@ -382,7 +387,21 @@ export default function SummaryTab({ groups, onSelectGroup }: Props) {
                           <tr
                             key={model.id}
                             className="border-b border-gray-50 last:border-0 cursor-pointer hover:bg-blue-50 transition-colors"
-                            onClick={() => onSelectGroup(group.id)}
+                            onClick={() => {
+                              if (model.submission) {
+                                setViewer({
+                                  isOpen: true,
+                                  fileUrl: instructorApi.getSubmissionFileUrl(model.submission.id),
+                                  modelName: model.name,
+                                  proteinPdbId: group.proteinPdbId,
+                                  groupId: group.id,
+                                  templateId: model.id,
+                                  submissionId: model.submission.id,
+                                })
+                              } else {
+                                onSelectGroup(group.id)
+                              }
+                            }}
                           >
                             <td className="px-5 py-2.5 font-medium text-gray-700 w-2/5">
                               <div className="flex items-center gap-2">
@@ -486,6 +505,17 @@ export default function SummaryTab({ groups, onSelectGroup }: Props) {
         )
       })}
       </div>
+
+      <JSmolViewer
+        isOpen={viewer.isOpen}
+        onClose={() => setViewer({ isOpen: false, fileUrl: '', modelName: '' })}
+        fileUrl={viewer.fileUrl}
+        modelName={viewer.modelName}
+        proteinPdbId={viewer.proteinPdbId}
+        groupId={viewer.groupId}
+        templateId={viewer.templateId}
+        submissionId={viewer.submissionId}
+      />
     </div>
   )
 }
