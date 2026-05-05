@@ -180,6 +180,16 @@ export default function SummaryTab({ groups, onSelectGroup, onTogglePrinting }: 
   }>>({})
   const [activityOpen, setActivityOpen] = useState<Record<string, boolean>>({})
   const [activityData, setActivityData] = useState<Record<string, instructorApi.GroupActivity | 'loading'>>({})
+  async function handleStatusChange(groupId: string, submissionId: string, newStatus: string) {
+    const updated = await instructorApi.updateSubmission(submissionId, { status: newStatus })
+    setSubmissionMap(prev => ({
+      ...prev,
+      [groupId]: prev[groupId].map(m =>
+        m.submission?.id === submissionId ? { ...m, submission: { ...m.submission!, ...updated } } : m
+      )
+    }))
+  }
+
   const [viewer, setViewer] = useState<{
     isOpen: boolean; fileUrl: string; modelName: string;
     proteinPdbId?: string; groupId?: string; templateId?: string; submissionId?: string
@@ -430,11 +440,17 @@ export default function SummaryTab({ groups, onSelectGroup, onTogglePrinting }: 
                                 )}
                               </div>
                             </td>
-                            <td className="px-5 py-2.5">
+                            <td className="px-5 py-2.5" onClick={e => e.stopPropagation()}>
                               {model.submission ? (
-                                <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_STYLES[model.submission.status] ?? STATUS_STYLES.DRAFT}`}>
-                                  {STATUS_LABELS[model.submission.status] ?? model.submission.status}
-                                </span>
+                                <select
+                                  value={model.submission.status}
+                                  onChange={e => handleStatusChange(group.id, model.submission!.id, e.target.value)}
+                                  className={`text-xs px-2 py-0.5 rounded-full font-medium border-0 cursor-pointer focus:outline-none focus:ring-1 focus:ring-offset-1 ${STATUS_STYLES[model.submission.status] ?? STATUS_STYLES.DRAFT}`}
+                                >
+                                  {Object.entries(STATUS_LABELS).map(([value, label]) => (
+                                    <option key={value} value={value}>{label}</option>
+                                  ))}
+                                </select>
                               ) : (
                                 <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-400">
                                   Not submitted
