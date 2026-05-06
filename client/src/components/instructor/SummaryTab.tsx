@@ -35,6 +35,10 @@ function buildMailto(to: string, cc: string[], subject: string, body: string): s
   return `mailto:${to}?${parts.join('&')}`
 }
 
+function shortenSchoolName(name: string): string {
+  return name.replace(/high\s*school/gi, 'HS')
+}
+
 const MEMBER_COLORS = ['#3b82f6', '#f97316']
 
 interface SparkChartProps {
@@ -192,8 +196,9 @@ export default function SummaryTab({ groups, onSelectGroup, onTogglePrinting }: 
 
   const [viewer, setViewer] = useState<{
     isOpen: boolean; fileUrl: string; modelName: string;
-    proteinPdbId?: string; groupId?: string; templateId?: string; submissionId?: string
+    proteinPdbId?: string; groupId?: string; templateId?: string; submissionId?: string; groupName?: string
   }>({ isOpen: false, fileUrl: '', modelName: '' })
+  const [hoverPreview, setHoverPreview] = useState<{ submissionId: string; top: number; left: number } | null>(null)
 
   const groupKey = groups.map(g => g.id).join(',')
 
@@ -211,6 +216,14 @@ export default function SummaryTab({ groups, onSelectGroup, onTogglePrinting }: 
         setSubmissionMap(map)
       })
       .finally(() => setLoadingSubmissions(false))
+    Promise.all(groups.map(g => instructorApi.getGroup(g.id)))
+      .then(details => {
+        const nudgeUpdates: Record<string, { open: boolean; loading: boolean; members: instructorApi.GroupMember[] }> = {}
+        details.forEach((d, i) => {
+          nudgeUpdates[groups[i].id] = { open: false, loading: false, members: d.members.map(m => m.user) }
+        })
+        setNudgeState(nudgeUpdates)
+      })
   }, [groupKey]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleGroup = (groupId: string) =>
@@ -290,6 +303,7 @@ export default function SummaryTab({ groups, onSelectGroup, onTogglePrinting }: 
         const lastActivity = timestamps.length > 0
           ? timeAgo(timestamps.reduce((a, b) => a > b ? a : b))
           : null
+        const totalUnread = models.reduce((sum, m) => sum + (m.submission?.unreadCount ?? 0), 0)
 
         const nudge = nudgeState[group.id]
         const students = (nudge?.members ?? []).filter(m => m.role === 'STUDENT')
@@ -303,7 +317,7 @@ export default function SummaryTab({ groups, onSelectGroup, onTogglePrinting }: 
 
             {/* ── Always-visible header (click to expand/collapse) ── */}
             <button
-              className="w-full text-left px-5 pt-5 pb-4 hover:bg-gray-50 transition-colors"
+              className="w-full text-left px-5 pt-4 pb-3 hover:bg-gray-50 transition-colors"
               onClick={() => toggleGroup(group.id)}
             >
               <div className="flex items-start justify-between gap-4">
@@ -315,63 +329,60 @@ export default function SummaryTab({ groups, onSelectGroup, onTogglePrinting }: 
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                   </svg>
                   <div className="min-w-0">
-                    <h3 className="text-lg font-semibold text-gray-800">{group.name}</h3>
-                    <p className="text-sm text-gray-500">
-                      {group.proteinName} · {group.proteinPdbId} · {group.memberCount} members
-                      {group.teacherName && ` · Teacher: ${group.teacherName}`}
+                    <h3 className="text-base font-semibold text-gray-800 leading-tight">
+                      {shortenSchoolName(group.schoolName ?? group.name.split(' - ')[0])} — {group.proteinPdbId}
+                    </h3>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      {students.length > 0
+                        ? students.map(s => `${s.firstName} ${s.lastName}`).join(', ')
+                        : `${group.memberCount} members`}
                     </p>
                   </div>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  {group.unreadMessageCount > 0 && (
-                    <span className="text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">
-                      {group.unreadMessageCount} unread
-                    </span>
-                  )}
-                  {lastActivity && (
-                    <span className="text-xs text-gray-400">Last activity: {lastActivity}</span>
-                  )}
-                  {onTogglePrinting && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); onTogglePrinting(group.id) }}
-                      title={group.readyForPrinting !== null ? 'Ready to Print — click to unmark' : 'Mark Ready to Print'}
-                      className={`flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-colors ${
-                        group.readyForPrinting !== null
-                          ? 'bg-violet-100 text-violet-700 hover:bg-violet-200'
-                          : 'text-gray-400 hover:text-violet-600 hover:bg-violet-50'
-                      }`}
-                    >
-                      <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
-                      </svg>
-                      {group.readyForPrinting !== null ? 'Ready to Print' : 'Print'}
-                    </button>
-                  )}
-                </div>
+                {onTogglePrinting && (
+                  <button
+                    onClick={(e) => { e.stopPropagation(); onTogglePrinting(group.id) }}
+                    title={group.readyForPrinting !== null ? 'Ready to Print — click to unmark' : 'Mark Ready to Print'}
+                    className={`shrink-0 flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-colors ${
+                      group.readyForPrinting !== null
+                        ? 'bg-violet-100 text-violet-700 hover:bg-violet-200'
+                        : 'text-gray-400 hover:text-violet-600 hover:bg-violet-50'
+                    }`}
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                    </svg>
+                    {group.readyForPrinting !== null ? 'Ready to Print' : 'Print'}
+                  </button>
+                )}
               </div>
-              {total > 0 && (
-                <div className="mt-2 pl-6 flex items-center gap-2 flex-wrap">
-                  {loadingSubmissions ? (
-                    <span className="text-xs text-gray-400">Loading…</span>
-                  ) : (() => {
-                    const noSub = models.filter(m => !m.submission).length
-                    const draft = models.filter(m => m.submission?.status === 'DRAFT').length
-                    const submitted = models.filter(m => m.submission?.status === 'SUBMITTED' || m.submission?.status === 'NEEDS_REVISION').length
-                    const approved = models.filter(m => m.submission?.status === 'APPROVED').length
-                    const pills: { label: string; count: number; className: string }[] = [
-                      { label: 'No submission', count: noSub, className: 'bg-gray-100 text-gray-500' },
-                      { label: 'Draft', count: draft, className: 'bg-gray-200 text-gray-600' },
-                      { label: 'Submitted', count: submitted, className: 'bg-blue-100 text-blue-700' },
-                      { label: 'Approved', count: approved, className: 'bg-green-100 text-green-700' },
-                    ]
-                    return pills.filter(p => p.count > 0).map(p => (
-                      <span key={p.label} className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.className}`}>
-                        {p.count} {p.label}
-                      </span>
-                    ))
-                  })()}
-                </div>
-              )}
+              <div className="mt-2 pl-6 pr-1 flex items-center gap-2 flex-wrap">
+                {lastActivity && (
+                  <span className="text-xs text-gray-400">Last activity: {lastActivity}</span>
+                )}
+                {total > 0 && !loadingSubmissions && (() => {
+                  const noSub = models.filter(m => !m.submission).length
+                  const draft = models.filter(m => m.submission?.status === 'DRAFT').length
+                  const submitted = models.filter(m => m.submission?.status === 'SUBMITTED' || m.submission?.status === 'NEEDS_REVISION').length
+                  const approved = models.filter(m => m.submission?.status === 'APPROVED').length
+                  const pills: { label: string; count: number; className: string }[] = [
+                    { label: 'No submission', count: noSub, className: 'bg-gray-100 text-gray-500' },
+                    { label: 'Draft', count: draft, className: 'bg-gray-200 text-gray-600' },
+                    { label: 'Submitted', count: submitted, className: 'bg-blue-100 text-blue-700' },
+                    { label: 'Approved', count: approved, className: 'bg-green-100 text-green-700' },
+                  ]
+                  return pills.filter(p => p.count > 0).map(p => (
+                    <span key={p.label} className={`text-xs px-2 py-0.5 rounded-full font-medium ${p.className}`}>
+                      {p.count} {p.label}
+                    </span>
+                  ))
+                })()}
+                {totalUnread > 0 && (
+                  <span className="ml-auto text-xs bg-red-100 text-red-600 px-2 py-0.5 rounded-full">
+                    {totalUnread} unread
+                  </span>
+                )}
+              </div>
             </button>
 
             {/* ── Expandable body ── */}
@@ -414,6 +425,16 @@ export default function SummaryTab({ groups, onSelectGroup, onTogglePrinting }: 
                           <tr
                             key={model.id}
                             className="border-b border-gray-50 last:border-0 cursor-pointer hover:bg-blue-50 transition-colors"
+                            onMouseEnter={model.submission ? (e) => {
+                              const firstTd = e.currentTarget.querySelector('td')
+                              const rect = firstTd?.getBoundingClientRect() ?? e.currentTarget.getBoundingClientRect()
+                              setHoverPreview({
+                                submissionId: model.submission!.id,
+                                top: rect.top + rect.height / 2,
+                                left: rect.right + 8,
+                              })
+                            } : undefined}
+                            onMouseLeave={() => setHoverPreview(null)}
                             onClick={() => {
                               if (model.submission) {
                                 setViewer({
@@ -424,6 +445,7 @@ export default function SummaryTab({ groups, onSelectGroup, onTogglePrinting }: 
                                   groupId: group.id,
                                   templateId: model.id,
                                   submissionId: model.submission.id,
+                                  groupName: shortenSchoolName(group.schoolName ?? group.name.split(' - ')[0]),
                                 })
                               } else {
                                 onSelectGroup(group.id)
@@ -458,16 +480,7 @@ export default function SummaryTab({ groups, onSelectGroup, onTogglePrinting }: 
                               )}
                             </td>
                             <td className="px-5 py-2.5 text-gray-400 text-xs">
-                              {model.submission
-                                ? timeAgo(model.submission.status === 'NEEDS_REVISION'
-                                    ? model.submission.updatedAt
-                                    : model.submission.createdAt)
-                                : '—'}
-                            </td>
-                            <td className="px-5 py-2.5 text-gray-500 text-xs">
-                              {model.submission
-                                ? `${model.submission.submittedBy.firstName} ${model.submission.submittedBy.lastName}`
-                                : ''}
+                              {model.submission ? timeAgo(model.submission.updatedAt) : '—'}
                             </td>
                           </tr>
                         ))}
@@ -539,6 +552,24 @@ export default function SummaryTab({ groups, onSelectGroup, onTogglePrinting }: 
       })}
       </div>
 
+      {hoverPreview && (
+        <div
+          className="fixed z-50 pointer-events-none rounded-lg shadow-xl border border-gray-200 bg-white overflow-hidden"
+          style={{
+            top: hoverPreview.top,
+            left: hoverPreview.left,
+            transform: 'translateY(-50%)',
+            width: Math.round(window.innerWidth / 5),
+          }}
+        >
+          <img
+            src={instructorApi.getSubmissionFileUrl(hoverPreview.submissionId)}
+            alt="Submission preview"
+            className="w-full h-auto block"
+          />
+        </div>
+      )}
+
       <JSmolViewer
         isOpen={viewer.isOpen}
         onClose={() => setViewer({ isOpen: false, fileUrl: '', modelName: '' })}
@@ -548,6 +579,7 @@ export default function SummaryTab({ groups, onSelectGroup, onTogglePrinting }: 
         groupId={viewer.groupId}
         templateId={viewer.templateId}
         submissionId={viewer.submissionId}
+        groupName={viewer.groupName}
       />
     </div>
   )

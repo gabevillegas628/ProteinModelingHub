@@ -52,6 +52,7 @@ interface JSmolViewerProps {
   groupId?: string;
   dialogClassName?: string;
   submissionId?: string;
+  groupName?: string;
 }
 
 type DisplayStyle = 'cartoon' | 'ribbon' | 'trace' | 'wireframe' | 'spacefill' | 'ball+stick';
@@ -97,7 +98,7 @@ function stripLoadCommands(state: string): string {
     .join('\n')
 }
 
-export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, proteinPdbId, templateId, onSubmit, groupId, dialogClassName, submissionId }: JSmolViewerProps) {
+export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, proteinPdbId, templateId, onSubmit, groupId, dialogClassName, submissionId, groupName }: JSmolViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null)
   const consoleRef = useRef<HTMLDivElement>(null)
   const consolePopoutRef = useRef<HTMLDivElement>(null)
@@ -918,7 +919,9 @@ export default function JSmolViewer({ isOpen, onClose, fileUrl, modelName, prote
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b bg-gray-50 shrink-0">
           <div>
-            <h3 className="text-lg font-semibold text-gray-800">{modelName}</h3>
+            <h3 className="text-lg font-semibold text-gray-800">
+              {modelName}{groupName && <span className="text-gray-400 font-normal"> — {groupName}</span>}
+            </h3>
             <p className="text-sm text-gray-500">3D Molecular Viewer {proteinPdbId && `• ${proteinPdbId}`}</p>
           </div>
           <div className="flex items-center gap-2">
