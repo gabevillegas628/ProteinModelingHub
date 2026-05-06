@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, Legend,
 } from 'recharts'
@@ -199,6 +199,7 @@ export default function SummaryTab({ groups, onSelectGroup, onTogglePrinting }: 
     proteinPdbId?: string; groupId?: string; templateId?: string; submissionId?: string; groupName?: string
   }>({ isOpen: false, fileUrl: '', modelName: '' })
   const [hoverPreview, setHoverPreview] = useState<{ submissionId: string; top: number; left: number } | null>(null)
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const groupKey = groups.map(g => g.id).join(',')
 
@@ -425,16 +426,6 @@ export default function SummaryTab({ groups, onSelectGroup, onTogglePrinting }: 
                           <tr
                             key={model.id}
                             className="border-b border-gray-50 last:border-0 cursor-pointer hover:bg-blue-50 transition-colors"
-                            onMouseEnter={model.submission ? (e) => {
-                              const firstTd = e.currentTarget.querySelector('td')
-                              const rect = firstTd?.getBoundingClientRect() ?? e.currentTarget.getBoundingClientRect()
-                              setHoverPreview({
-                                submissionId: model.submission!.id,
-                                top: rect.top + rect.height / 2,
-                                left: rect.right + 8,
-                              })
-                            } : undefined}
-                            onMouseLeave={() => setHoverPreview(null)}
                             onClick={() => {
                               if (model.submission) {
                                 setViewer({
@@ -452,7 +443,23 @@ export default function SummaryTab({ groups, onSelectGroup, onTogglePrinting }: 
                               }
                             }}
                           >
-                            <td className="px-5 py-2.5 font-medium text-gray-700 w-2/5">
+                            <td
+                              className="px-5 py-2.5 font-medium text-gray-700 w-2/5"
+                              onMouseEnter={model.submission ? (e) => {
+                                const rect = e.currentTarget.getBoundingClientRect()
+                                hoverTimer.current = setTimeout(() => {
+                                  setHoverPreview({
+                                    submissionId: model.submission!.id,
+                                    top: rect.top + rect.height / 2,
+                                    left: rect.right + 8,
+                                  })
+                                }, 400)
+                              } : undefined}
+                              onMouseLeave={() => {
+                                if (hoverTimer.current) clearTimeout(hoverTimer.current)
+                                setHoverPreview(null)
+                              }}
+                            >
                               <div className="flex items-center gap-2">
                                 {model.name}
                                 {(model.submission?.unreadCount ?? 0) > 0 && (
