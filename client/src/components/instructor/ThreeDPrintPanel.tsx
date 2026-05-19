@@ -9,6 +9,8 @@ interface ViewerState {
   submissionId: string;
   templateName: string;
   groupName: string;
+  groupId: string;
+  templateId: string;
 }
 
 export default function ThreeDPrintPanel() {
@@ -244,6 +246,8 @@ export default function ThreeDPrintPanel() {
                           submissionId: selected.submission.id,
                           templateName: selected.name,
                           groupName: group.name,
+                          groupId: group.id,
+                          templateId: selected.id,
                         })}
                         className="flex items-center gap-1.5 text-sm px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition-colors shrink-0"
                       >
@@ -297,6 +301,14 @@ export default function ThreeDPrintPanel() {
           fileUrl={instructorApi.getSubmissionFileUrl(viewer.submissionId)}
           modelName={`${viewer.groupName} — ${viewer.templateName}`}
           dialogClassName="min-h-[85vh]"
+          groupId={viewer.groupId}
+          templateId={viewer.templateId}
+          submissionId={viewer.submissionId}
+          onSubmit={async (templateId, file) => {
+            await instructorApi.uploadSubmissionForGroup(viewer.groupId, templateId, file)
+            const updated = await instructorApi.getPrintGroups()
+            setGroups(updated)
+          }}
         />
       )}
     </div>
