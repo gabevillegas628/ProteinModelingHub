@@ -15,6 +15,7 @@ interface ViewerState {
 
 export default function ThreeDPrintPanel() {
   const [groups, setGroups] = useState<instructorApi.PrintGroup[]>([])
+  const [totalGroupCount, setTotalGroupCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [exportingId, setExportingId] = useState<string | null>(null)
@@ -25,8 +26,11 @@ export default function ThreeDPrintPanel() {
   const exportContainerRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    instructorApi.getPrintGroups()
-      .then(setGroups)
+    Promise.all([instructorApi.getPrintGroups(), instructorApi.getGroups()])
+      .then(([printGroups, allGroups]) => {
+        setGroups(printGroups)
+        setTotalGroupCount(allGroups.length)
+      })
       .catch(e => setError(e instanceof Error ? e.message : 'Failed to load'))
       .finally(() => setLoading(false))
   }, [])
@@ -148,21 +152,36 @@ export default function ThreeDPrintPanel() {
               Groups marked ready for printing. View each model to verify colors, then export as 3MF for BambuStudio.
             </p>
           </div>
-          {groups.length > 0 && (
-            <div className="shrink-0 flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-3">
+          <div className="shrink-0 flex items-center gap-3">
+            <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-3">
               <div className="text-right">
                 <div className="text-2xl font-bold text-gray-800 leading-none">
-                  {printedCount}<span className="text-gray-400 font-normal text-lg"> / {groups.length}</span>
+                  {groups.length}<span className="text-gray-400 font-normal text-lg"> / {totalGroupCount}</span>
                 </div>
-                <div className="text-xs text-gray-500 mt-0.5">groups printed</div>
+                <div className="text-xs text-gray-500 mt-0.5">groups marked</div>
               </div>
-              <div className="w-10 h-10 rounded-full flex items-center justify-center bg-green-50 border-2 border-green-200 ml-2">
-                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <div className="w-10 h-10 rounded-full flex items-center justify-center bg-violet-50 border-2 border-violet-200 ml-2">
+                <svg className="w-5 h-5 text-violet-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
                 </svg>
               </div>
             </div>
-          )}
+            {groups.length > 0 && (
+              <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-3">
+                <div className="text-right">
+                  <div className="text-2xl font-bold text-gray-800 leading-none">
+                    {printedCount}<span className="text-gray-400 font-normal text-lg"> / {groups.length}</span>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-0.5">groups printed</div>
+                </div>
+                <div className="w-10 h-10 rounded-full flex items-center justify-center bg-green-50 border-2 border-green-200 ml-2">
+                  <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {exportError && (
