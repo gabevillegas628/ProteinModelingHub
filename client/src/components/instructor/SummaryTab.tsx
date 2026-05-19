@@ -587,6 +587,11 @@ export default function SummaryTab({ groups, onSelectGroup, onTogglePrinting }: 
         templateId={viewer.templateId}
         submissionId={viewer.submissionId}
         groupName={viewer.groupName}
+        onSubmit={viewer.groupId && viewer.templateId ? async (templateId, file) => {
+          await instructorApi.uploadSubmissionForGroup(viewer.groupId!, templateId, file)
+          const updated = await instructorApi.getGroupSubmissions(viewer.groupId!)
+          setSubmissionMap(prev => ({ ...prev, [viewer.groupId!]: updated }))
+        } : undefined}
       />
     </div>
   )

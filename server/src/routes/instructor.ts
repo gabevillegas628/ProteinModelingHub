@@ -21,6 +21,30 @@ const MODELS_DIR = path.join(UPLOAD_BASE, 'models');
 const LITERATURE_DIR = path.join(UPLOAD_BASE, 'literature');
 const PRESENTATIONS_DIR = path.join(UPLOAD_BASE, 'presentations');
 
+// Configure multer for model uploads (PNG/PNGJ files)
+const modelStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    cb(null, MODELS_DIR);
+  },
+  filename: (_req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+    cb(null, uniqueSuffix + path.extname(file.originalname));
+  }
+});
+
+const modelUpload = multer({
+  storage: modelStorage,
+  fileFilter: (_req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (['.png', '.pngj'].includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PNG/PNGJ files are allowed for models'));
+    }
+  },
+  limits: { fileSize: 10 * 1024 * 1024 }
+});
+
 // Configure multer for literature uploads (PDF files)
 const literatureStorage = multer.diskStorage({
   destination: (_req, _file, cb) => {
@@ -331,6 +355,75 @@ router.patch('/submissions/:submissionId', async (req: AuthRequest, res: Respons
   } catch (error) {
     console.error('Error updating submission:', error);
     res.status(500).json({ error: 'Failed to update submission' });
+  }
+});
+
+// Upload/replace a model submission on behalf of a student group
+router.post('/groups/:groupId/submissions/:templateId/upload', modelUpload.single('file'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { groupId, templateId } = req.params as { groupId: string; templateId: string };
+    const file = req.file;
+
+    if (!file) {
+      res.status(400).json({ error: 'No file uploaded' });
+      return;
+    }
+
+    const group = await prisma.group.findUnique({ where: { id: groupId } });
+    if (!group) {
+      fs.unlinkSync(file.path);
+      res.status(404).json({ error: 'Group not found' });
+      return;
+    }
+
+    const template = await prisma.modelTemplate.findUnique({ where: { id: templateId } });
+    if (!template) {
+      fs.unlinkSync(file.path);
+      res.status(404).json({ error: 'Model template not found' });
+      return;
+    }
+
+    const existingSubmission = await prisma.submission.findFirst({
+      where: { groupId, modelTemplateId: templateId },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    let submission;
+    if (existingSubmission) {
+      const oldPath = path.join(MODELS_DIR, existingSubmission.filePath);
+      if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+
+      submission = await prisma.submission.update({
+        where: { id: existingSubmission.id },
+        data: {
+          submittedById: req.user!.userId,
+          fileName: file.originalname,
+          filePath: file.filename,
+          fileSize: file.size,
+          status: 'SUBMITTED',
+          updatedAt: new Date()
+        },
+        include: { submittedBy: { select: { id: true, firstName: true, lastName: true } } }
+      });
+    } else {
+      submission = await prisma.submission.create({
+        data: {
+          groupId,
+          modelTemplateId: templateId,
+          submittedById: req.user!.userId,
+          fileName: file.originalname,
+          filePath: file.filename,
+          fileSize: file.size,
+          status: 'SUBMITTED'
+        },
+        include: { submittedBy: { select: { id: true, firstName: true, lastName: true } } }
+      });
+    }
+
+    res.status(201).json(submission);
+  } catch (error) {
+    console.error('Error uploading submission for group:', error);
+    res.status(500).json({ error: 'Failed to upload submission' });
   }
 });
 

@@ -208,6 +208,25 @@ export function updateSubmission(
   });
 }
 
+export async function uploadSubmissionForGroup(groupId: string, templateId: string, file: File): Promise<Submission> {
+  const token = localStorage.getItem('modeling_token');
+  const formData = new FormData();
+  formData.append('file', file);
+
+  const response = await fetch(`${API_BASE}/groups/${groupId}/submissions/${templateId}/upload`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: 'Upload failed' }));
+    throw new Error(error.error || 'Upload failed');
+  }
+
+  return response.json();
+}
+
 // ============================================
 // Literature
 // ============================================

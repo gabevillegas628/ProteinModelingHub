@@ -397,6 +397,10 @@ export default function SubmissionsTab({ groupId, proteinPdbId }: Props) {
         groupId={groupId}
         templateId={viewer.templateId}
         submissionId={viewer.submissionId}
+        onSubmit={viewer.templateId ? async (templateId, file) => {
+          await instructorApi.uploadSubmissionForGroup(groupId, templateId, file)
+          await loadSubmissions()
+        } : undefined}
       />
 
       {/* Discussion Modal */}
