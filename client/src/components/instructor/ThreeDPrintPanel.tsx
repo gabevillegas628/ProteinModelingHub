@@ -134,14 +134,33 @@ export default function ThreeDPrintPanel() {
     )
   }
 
+  const printedCount = groups.filter(g => g.printedAt).length
+
   return (
     <div className="flex-1 overflow-y-auto p-6">
-      <div className="max-w-3xl mx-auto">
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold text-gray-800">3D Printing</h2>
-          <p className="text-sm text-gray-500 mt-1">
-            Groups marked ready for printing. View each model to verify colors, then export as 3MF for BambuStudio.
-          </p>
+      <div className="max-w-6xl mx-auto">
+        <div className="mb-6 flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-800">3D Printing</h2>
+            <p className="text-sm text-gray-500 mt-1">
+              Groups marked ready for printing. View each model to verify colors, then export as 3MF for BambuStudio.
+            </p>
+          </div>
+          {groups.length > 0 && (
+            <div className="shrink-0 flex items-center gap-2 bg-white border border-gray-200 rounded-xl px-4 py-3">
+              <div className="text-right">
+                <div className="text-2xl font-bold text-gray-800 leading-none">
+                  {printedCount}<span className="text-gray-400 font-normal text-lg"> / {groups.length}</span>
+                </div>
+                <div className="text-xs text-gray-500 mt-0.5">groups printed</div>
+              </div>
+              <div className="w-10 h-10 rounded-full flex items-center justify-center bg-green-50 border-2 border-green-200 ml-2">
+                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                </svg>
+              </div>
+            </div>
+          )}
         </div>
 
         {exportError && (
@@ -159,7 +178,7 @@ export default function ThreeDPrintPanel() {
             <p className="text-xs mt-1">Open a group and click "Mark Ready to Print" to add it here.</p>
           </div>
         ) : (
-          <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
             {groups.map(group => (
               <div key={group.id} className={`bg-white border rounded-xl overflow-hidden ${group.printedAt ? 'border-green-200' : 'border-gray-200'}`}>
                 <div className={`px-5 py-4 border-b flex items-center justify-between ${group.printedAt ? 'bg-green-50 border-green-100' : 'bg-violet-50 border-gray-100'}`}>
